@@ -5,7 +5,7 @@
 
 #include <libscapi/include/primitives/Matrix.hpp>
 #include <libscapi/include/CryptoInfra/Protocol.hpp>
-#include <libscapi/include/circuits/arithmeticCircuit/ArithmeticCircuit.hpp>
+#include <libscapi/include/circuits/ArithmeticCircuit.hpp>
 #include <vector>
 #include <bitset>
 #include <iostream>
