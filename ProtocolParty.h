@@ -1933,7 +1933,7 @@ void ProtocolParty<FieldType>::outputPhase()
         if(circuit.getGates()[k].gateType == OUTPUT)
         {
             // send to party (which need this gate) your share for this gate
-            sendBufsElements[circuit.getGates()[k].party - 1].push_back(gateShareArr[circuit.getGates()[k].input1]);
+            sendBufsElements[circuit.getGates()[k].party].push_back(gateShareArr[circuit.getGates()[k].input1]);
         }
     }
 
@@ -1957,7 +1957,7 @@ void ProtocolParty<FieldType>::outputPhase()
     if(flag_print) {
         cout << "endnend" << endl;}
     for(int k=M-numOfOutputGates ; k < M; k++) {
-        if(circuit.getGates()[k].gateType == OUTPUT && circuit.getGates()[k].party - 1 == m_partyId)
+        if(circuit.getGates()[k].gateType == OUTPUT && circuit.getGates()[k].party == m_partyId)
         {
             for(int i=0; i < N; i++) {
 
