@@ -547,9 +547,9 @@ void ProtocolParty<FieldType>::inputPhase()
     {
         if(circuit.getGates()[k].gateType == INPUT) {
             //get the expected sized from the other parties
-            sizes[circuit.getGates()[k].party - 1]++;
+            sizes[circuit.getGates()[k].party]++;
 
-            if (circuit.getGates()[k].party - 1 == m_partyId) {
+            if (circuit.getGates()[k].party == m_partyId) {
                 auto input = myInputs[index];
                 index++;
                 if (flag_print) {
@@ -617,8 +617,8 @@ void ProtocolParty<FieldType>::inputPhase()
     {
         if(circuit.getGates()[k].gateType == INPUT)
         {
-            auto share = recBufElements[circuit.getGates()[k].party - 1][counters[circuit.getGates()[k].party - 1]];
-            counters[circuit.getGates()[k].party - 1] += 1;
+            auto share = recBufElements[circuit.getGates()[k].party][counters[circuit.getGates()[k].party]];
+            counters[circuit.getGates()[k].party] += 1;
             gateShareArr[circuit.getGates()[k].output] = share; // set the share sent from the party owning the input
 
         }
