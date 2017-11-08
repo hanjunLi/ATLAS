@@ -133,10 +133,18 @@ void TemplateField<GF2E>::elementToBytes(unsigned char* elemenetInBytes, GF2E& e
     BytesFromGF2X(elemenetInBytes,rep(element),fieldParam/8);
 }
 
+
 template <>
 void TemplateField<ZpKaratsubaElement>::elementToBytes(unsigned char* elemenetInBytes, ZpKaratsubaElement& element){
 
     memcpy(elemenetInBytes, (byte*)(&element.elem), 5);
+}
+
+template <>
+void TemplateField<ZpKaratsubaElement>::elementVectorToByteVector(vector<ZpKaratsubaElement> &elementVector, vector<byte> &byteVector){
+
+    //TBD
+
 }
 
 template <>
@@ -169,6 +177,22 @@ template <>
 void TemplateField<ZZ_p>::elementToBytes(unsigned char* elemenetInBytes, ZZ_p& element){
 
     BytesFromZZ(elemenetInBytes,rep(element),elementSizeInBytes);
+}
+
+
+
+template <>
+void TemplateField<ZZ_p>::elementVectorToByteVector(vector<ZZ_p> &elementVector, vector<byte> &byteVector){
+
+    //TBD
+
+}
+
+template <>
+void TemplateField<GF2E>::elementVectorToByteVector(vector<GF2E> &elementVector, vector<byte> &byteVector){
+
+    //TBD
+
 }
 
 

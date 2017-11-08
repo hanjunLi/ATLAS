@@ -43,7 +43,6 @@ private:
     int times; //number of times to run the run function
     int iteration; //number of the current iteration
     VDM<FieldType> matrix_vand;
-    vector<FieldType> firstRowVandInverse;
     TemplateField<FieldType> *field;
     vector<shared_ptr<ProtocolPartyData>>  parties;
     vector<FieldType> randomTAnd2TShares;
@@ -61,6 +60,7 @@ private:
     HIM<FieldType> matrix_for_interpolate;
     HIM<FieldType> matrix_for_t;
     HIM<FieldType> matrix_for_2t;
+    vector<FieldType> y_for_interpolate;
 
 
     HIM<FieldType> matrix_him;
@@ -153,11 +153,6 @@ public:
      */
     void initializationPhase();
 
-    /**
-     * Generates the first row of the inverse of the vandermonde matrix and saves it
-     * in firstRowVandInverse for future use.
-     */
-    void initFirstRowInvVDM();
 
     /**
      * A random double-sharing is a pair of two sharings of the same random value, where the one sharing is
@@ -251,7 +246,7 @@ public:
      * this HIM with the given x-vector (this is actually a scalar product).
      * The first (and only) element of the output vector is the secret.
      */
-    FieldType interpolate(vector<FieldType> x);
+    FieldType interpolate(vector<FieldType>& x);
 
 
     /**
@@ -472,17 +467,6 @@ cout<<"in online"<<endl;
     if(flag_print_timings) {
         cout << "time in milliseconds verificationPhase: " << duration << endl;
     }
-
-    //t1 = high_resolution_clock::now();
-    //comparingViews();
-    //t2 = high_resolution_clock::now();
-    //duration = duration_cast<milliseconds>(t2-t1).count();
-    //protocolTimer->comparingViewsPhaseArr[iteration] = duration;
-
-//    if(flag_print_timings) {
-//        cout << "time in milliseconds comparing views: " << duration << endl;
-//    }
-
 
     t1 = high_resolution_clock::now();
 
@@ -782,9 +766,11 @@ void ProtocolParty<FieldType>::generateRandomShares(int numOfRandoms, vector<Fie
     int fieldByteSize = field->getElementSizeInBytes();
     for(int i=0; i < N; i++)
     {
-        for(int j=0; j<sendBufsElements[i].size();j++) {
-            field->elementToBytes(sendBufsBytes[i].data() + (j * fieldByteSize), sendBufsElements[i][j]);
-        }
+//        for(int j=0; j<sendBufsElements[i].size();j++) {
+//            field->elementToBytes(sendBufsBytes[i].data() + (j * fieldByteSize), sendBufsElements[i][j]);
+//        }
+
+        field->elementVectorToByteVector(sendBufsElements[i], sendBufsBytes[i]);
     }
 
     roundFunctionSync(sendBufsBytes, recBufsBytes, 4);
@@ -908,9 +894,11 @@ void ProtocolParty<FieldType>::generateRandom2TAndTShares(int numOfRandomPairs, 
     int fieldByteSize = field->getElementSizeInBytes();
     for(int i=0; i < N; i++)
     {
-        for(int j=0; j<sendBufsElements[i].size();j++) {
-            field->elementToBytes(sendBufsBytes[i].data() + (j * fieldByteSize), sendBufsElements[i][j]);
-        }
+//        for(int j=0; j<sendBufsElements[i].size();j++) {
+//            field->elementToBytes(sendBufsBytes[i].data() + (j * fieldByteSize), sendBufsElements[i][j]);
+//        }
+
+        field->elementVectorToByteVector(sendBufsElements[i], sendBufsBytes[i]);
     }
 
     roundFunctionSync(sendBufsBytes, recBufsBytes,4);
@@ -973,6 +961,7 @@ template <class FieldType>
 void ProtocolParty<FieldType>::initializationPhase()
 {
     beta.resize(1);
+    y_for_interpolate.resize(N);
     randomShare.resize(1);
     gateShareArr.resize((M - circuit.getNrOfOutputGates())*2); // my share of the gate (for all gates)
     alpha.resize(N); // N distinct non-zero field elements
@@ -1031,11 +1020,6 @@ void ProtocolParty<FieldType>::initializationPhase()
     matrix_for_2t.InitHIMVectorAndsizes(alpha, 2*T + 1, N-(2*T +1));
 
 
-    //create the first row of the inverse of the nxn vandemonde matrix firstRowVandInverse
-    initFirstRowInvVDM();
-
-
-
     if(flag_print){
         cout<< "matrix_for_t : " <<endl;
         matrix_for_t.Print();
@@ -1047,31 +1031,6 @@ void ProtocolParty<FieldType>::initializationPhase()
 
 
 
-}
-template <class FieldType>
-void ProtocolParty<FieldType>::initFirstRowInvVDM(){
-    firstRowVandInverse.resize(N);
-
-    //first calc the multiplication of all the alpha's for the denominator and the diff for the
-    FieldType accumMult = *field->GetOne();
-
-    for(int i=0; i<N; i++){
-        accumMult*= alpha[i];
-
-    }
-
-    FieldType accum = *field->GetOne();
-    for(int j=0; j<N; j++){
-
-        for(int m=0; m<N; m++){
-            if(m!=j) {
-                accum *= (alpha[m] - alpha[j]);
-            }
-        }
-
-        firstRowVandInverse[j] = accumMult/alpha[j]/accum;
-        accum = *field->GetOne();
-    }
 }
 
 template <class FieldType>
@@ -1170,11 +1129,11 @@ bool ProtocolParty<FieldType>::checkConsistency(vector<FieldType>& x, int d)
 
 // Interpolate polynomial at position Zero
 template <class FieldType>
-FieldType ProtocolParty<FieldType>::interpolate(vector<FieldType> x)
+FieldType ProtocolParty<FieldType>::interpolate(vector<FieldType>& x)
 {
-    vector<FieldType> y(N); // result of interpolate
-    matrix_for_interpolate.MatrixMult(x, y);
-    return y[0];
+    //vector<FieldType> y(N); // result of interpolate
+    matrix_for_interpolate.MatrixMult(x, y_for_interpolate);
+    return y_for_interpolate[0];
 }
 
 
@@ -1292,9 +1251,12 @@ int ProtocolParty<FieldType>::processMultDN(int indexInRandomArray) {
     xyMinusR.resize(acctualNumOfMultGates*2);
     xyMinusRBytes.resize(acctualNumOfMultGates*fieldByteSize*2);
 
-    for(int j=0; j<xyMinusRShares.size();j++) {
-        field->elementToBytes(xyMinusRSharesBytes.data() + (j * fieldByteSize), xyMinusRShares[j]);
-    }
+//    for(int j=0; j<xyMinusRShares.size();j++) {
+//        field->elementToBytes(xyMinusRSharesBytes.data() + (j * fieldByteSize), xyMinusRShares[j]);
+//    }
+
+    field->elementVectorToByteVector(xyMinusRShares, xyMinusRSharesBytes);
+
 
     if (m_partyId == 0) {
 
@@ -1334,9 +1296,11 @@ int ProtocolParty<FieldType>::processMultDN(int indexInRandomArray) {
             xyMinusR[k] = interpolate(xyMinurAllShares);
 
             //convert to bytes
-            field->elementToBytes(xyMinusRBytes.data() + (k * fieldByteSize), xyMinusR[k]);
+            //field->elementToBytes(xyMinusRBytes.data() + (k * fieldByteSize), xyMinusR[k]);
 
         }
+
+        field->elementVectorToByteVector(xyMinusR, xyMinusRBytes);
 
         //send the reconstructed vector to all the other parties
         sendFromP1(xyMinusRBytes);
@@ -1412,9 +1376,11 @@ void ProtocolParty<FieldType>::DNHonestMultiplication(FieldType *a, FieldType *b
     xyMinusR.resize(numOfTrupples);
     xyMinusRBytes.resize(numOfTrupples*fieldByteSize);
 
-    for(int j=0; j<xyMinusRShares.size();j++) {
-        field->elementToBytes(xyMinusRSharesBytes.data() + (j * fieldByteSize), xyMinusRShares[j]);
-    }
+//    for(int j=0; j<xyMinusRShares.size();j++) {
+//        field->elementToBytes(xyMinusRSharesBytes.data() + (j * fieldByteSize), xyMinusRShares[j]);
+//    }
+
+    field->elementVectorToByteVector(xyMinusRShares, xyMinusRSharesBytes);
 
     if (m_partyId == 0) {
 
@@ -1456,9 +1422,11 @@ void ProtocolParty<FieldType>::DNHonestMultiplication(FieldType *a, FieldType *b
             xyMinusR[k] = interpolate(xyMinurAllShares);
 
             //convert to bytes
-            field->elementToBytes(xyMinusRBytes.data() + (k * fieldByteSize), xyMinusR[k]);
+            //field->elementToBytes(xyMinusRBytes.data() + (k * fieldByteSize), xyMinusR[k]);
 
         }
+
+        field->elementVectorToByteVector(xyMinusR, xyMinusRBytes);
 
         //send the reconstructed vector to all the other parties
         sendFromP1(xyMinusRBytes);
@@ -1634,9 +1602,9 @@ bool ProtocolParty<FieldType>::comparingViews(){
 
 
     if(cmp==0){
-        if (flag_print) {
+        //if (flag_print) {
             cout << "all digests are the same" << endl;
-        }
+        //}
 
         return true;
 
@@ -1782,7 +1750,7 @@ bool ProtocolParty<FieldType>::verificationBatched(FieldType *neededShares,
 
 
     vector<FieldType> u(1);
-    vector<FieldType> w(1);
+    FieldType w;
     vector<FieldType> ru(1);
     vector<FieldType> T(1);
 
@@ -1790,25 +1758,25 @@ bool ProtocolParty<FieldType>::verificationBatched(FieldType *neededShares,
     for(int i=0;i<numOfTriples;i++){
 
         u[0] += randomElements[i]*neededShares[i*2];
-        w[0] += randomElements[i]*neededShares[i*2+1];
+        w += randomElements[i]*neededShares[i*2+1];
     }
 
 
     //run the semi honest multiplication on u and r to get ru
     DNHonestMultiplication(u.data(), randomShare.data(),ru, 1);
 
-    T[0] = w[0] + ru[0];
+    T[0] = w - ru[0];
 
     comparingViews();
 
-    //open [V]
+    //open [T]
     vector<FieldType> shareArr(1);
     vector<FieldType> secretArr(1);
     shareArr[0] = T[0];
 
     openShare(1,shareArr,secretArr);
 
-    //check that V=0
+    //check that T=0
     if(secretArr[0] != *field->GetZero()) {
         cout<<"bassssssaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"<<endl;
         return false;
@@ -1820,70 +1788,6 @@ bool ProtocolParty<FieldType>::verificationBatched(FieldType *neededShares,
     }
 
 }
-
-
-//
-//template <class FieldType>
-//bool ProtocolParty<FieldType>::verificationBatched(FieldType *x, FieldType *y, FieldType *z,
-//                                                   FieldType * randomElements, int numOfTriples){
-//
-//
-//
-//    vector<FieldType> r(numOfTriples);//vector holding the random shares generated
-//    vector<FieldType> rx(numOfTriples);//vector holding the multiplication of x and r
-//    vector<FieldType> firstMult(2*numOfTriples);//vector some computations
-//    vector<FieldType> secondMult(2*numOfTriples);//vector some computations
-//    vector<FieldType> outputMult(2*numOfTriples);//vector holding the 4*numOfTriples output of the multiplication
-//    vector<FieldType> v(numOfTriples);//vector holding the 4*numOfTriples output of the multiplication
-//
-//    //first generate numOfTriples random shares
-//    generateRandomSharesWithCheck(numOfTriples, r);
-//
-//
-//    //run semi-honest multiplication on x and r
-//    DNHonestMultiplication(x, r.data(),rx, numOfTriples);
-//
-//    //prepare the 4k pairs for multiplication
-//    for(int k=0; k<numOfTriples; k++){
-//
-//        firstMult[k*2] = rx[k];//the row assignment (look at the paper)
-//        secondMult[k*2] = y[k];
-//
-//        firstMult[k*2+1] = r[k];
-//        secondMult[k*2+1] = z[k];
-//
-//    }
-//
-//    //run semi-honest multiplication on x and r
-//    DNHonestMultiplication(firstMult.data(), secondMult.data(),outputMult, numOfTriples*2);
-//
-//    //compute the output share to check
-//    FieldType vk;
-//    FieldType VShare;
-//    for(int k=0; k<numOfTriples; k++){
-//        vk = outputMult[2*k + 1]  - outputMult[2*k];
-//        VShare += vk*randomElements[k];
-//
-//    }
-//
-//
-//    //open [V]
-//    vector<FieldType> shareArr(1);
-//    vector<FieldType> secretArr(1);
-//    shareArr[0] = VShare;
-//
-//    openShare(1,shareArr,secretArr);
-//
-//    //check that V=0
-//    if(secretArr[0] != *field->GetZero())
-//        return false;
-//    else
-//        return true;
-//
-//}
-
-
-
 
 
 /**
@@ -1920,10 +1824,14 @@ void ProtocolParty<FieldType>::outputPhase()
     {
         sendBufsBytes[i].resize(sendBufsElements[i].size()*fieldByteSize);
         recBufBytes[i].resize(sendBufsElements[m_partyId].size()*fieldByteSize);
-        for(int j=0; j<sendBufsElements[i].size();j++) {
-            field->elementToBytes(sendBufsBytes[i].data() + (j * fieldByteSize), sendBufsElements[i][j]);
-        }
+//        for(int j=0; j<sendBufsElements[i].size();j++) {
+//            field->elementToBytes(sendBufsBytes[i].data() + (j * fieldByteSize), sendBufsElements[i][j]);
+//        }
+
+        field->elementVectorToByteVector(sendBufsElements[i], sendBufsBytes[i]);
     }
+
+
 
     //comm->roundfunctionI(sendBufsBytes, recBufBytes,7);
     roundFunctionSync(sendBufsBytes, recBufBytes,7);
