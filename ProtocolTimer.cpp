@@ -18,7 +18,6 @@ void ProtocolTimer::writeToFile() {
         << inputPreparationArr[i] << ","
         << computationPhaseArr[i] << ","
         << verificationPhaseArr[i] << ","
-        << comparingViewsPhaseArr[i] << ","
         << outputPhaseArr[i] << ","
         << totalTimeArr[i] << ",\n";
 
@@ -26,7 +25,6 @@ void ProtocolTimer::writeToFile() {
         << inputPreparationArr[i] << ","
         << computationPhaseArr[i] << ","
         << verificationPhaseArr[i] << ","
-        << comparingViewsPhaseArr[i] << ","
         << outputPhaseArr[i] << ","
         << totalTimeArr[i] << ",\n";
     }
@@ -41,7 +39,6 @@ ProtocolTimer::ProtocolTimer(int times, string fileName) : fileName(fileName), t
     preparationPhaseArr = new int[times];
     inputPreparationArr = new int[times];
     verificationPhaseArr = new int[times];
-    comparingViewsPhaseArr = new int[times];
     computationPhaseArr= new int[times];
     outputPhaseArr= new int[times];
     totalTimeArr= new int[times];

@@ -1,5 +1,5 @@
-/home/meital/clion-2017.1.3/bin/cmake/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /home/meital/ClionProjects/MPCHonestMajorityNoTriples
--- Boost version: 1.58.0
+/home/meital/clion-2017.2.3/bin/cmake/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /home/meital/ClionProjects/MPCHonestMajorityNoTriples
+-- Boost version: 1.64.0
 -- Found the following Boost libraries:
 --   system
 --   thread

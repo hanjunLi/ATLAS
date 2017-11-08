@@ -20,7 +20,6 @@ public:
     int* inputPreparationArr;
     int* computationPhaseArr;
     int* verificationPhaseArr;
-    int* comparingViewsPhaseArr;
     int* outputPhaseArr;
     int* totalTimeArr;
 
@@ -33,7 +32,6 @@ public:
                       delete[] inputPreparationArr;
                       delete[] verificationPhaseArr;
                       delete[] computationPhaseArr;
-                      delete[] comparingViewsPhaseArr;
                       delete[] outputPhaseArr;
                       delete[] totalTimeArr;}
 
