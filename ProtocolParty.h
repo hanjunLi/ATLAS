@@ -1038,7 +1038,7 @@ bool ProtocolParty<FieldType>::preparationPhase()
     //of 3 multiplications in the verification phase.
 
     offset = 0;
-    offlineDNForMultiplication((circuit.getNrOfInputGates() + circuit.getNrOfMultiplicationGates() + 1)*2*iterations);
+    offlineDNForMultiplication((circuit.getNrOfInputGates() + circuit.getNrOfMultiplicationGates()*2 + 1)*iterations);
 
 
     return true;
