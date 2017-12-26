@@ -286,7 +286,7 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char* argv[]) : Protocol("MPCH
     this->protocolTimer = new ProtocolTimer(times, outputTimerFileName);
 
     vector<string> subTaskNames{"Offline", "preparationPhase", "Online", "inputPhase", "ComputePhase", "VerificationPhase", "outputPhase"};
-    timer = new Measurement("MPCHonestMajorityNoTriples", m_partyId, N, times, subTaskNames);
+    timer = new Measurement("MPCHonestMajorityNoTriples", m_partyId, n, times, subTaskNames);
 
     if(fieldType.compare("ZpMersenne") == 0) {
         field = new TemplateField<FieldType>(2147483647);
@@ -381,10 +381,10 @@ void ProtocolParty<FieldType>::run() {
     for (iteration=0; iteration<times; iteration++){
 
         auto t1start = high_resolution_clock::now();
-        timer->startSubTask();
+        timer->startSubTask(0, iteration);
         runOffline();
         timer->endSubTask(0, iteration);
-        timer->startSubTask();
+        timer->startSubTask(2, iteration);
         runOnline();
         timer->endSubTask(2, iteration);
 
@@ -401,7 +401,7 @@ void ProtocolParty<FieldType>::run() {
 template <class FieldType>
 void ProtocolParty<FieldType>::runOffline() {
     auto t1 = high_resolution_clock::now();
-    timer->startSubTask();
+    timer->startSubTask(1, iteration);
     if(preparationPhase() == false) {
         if(flag_print) {
             cout << "cheating!!!" << '\n';}
@@ -425,7 +425,7 @@ template <class FieldType>
 void ProtocolParty<FieldType>::runOnline() {
 
     auto t1 = high_resolution_clock::now();
-    timer->startSubTask();
+    timer->startSubTask(3, iteration);
     inputPhase();
     timer->endSubTask(3, iteration);
     auto t2 = high_resolution_clock::now();
@@ -438,7 +438,7 @@ void ProtocolParty<FieldType>::runOnline() {
 
 
     t1 = high_resolution_clock::now();
-    timer->startSubTask();
+    timer->startSubTask(4, iteration);
     computationPhase(m);
     timer->endSubTask(4, iteration);
     t2 = high_resolution_clock::now();
@@ -453,7 +453,7 @@ void ProtocolParty<FieldType>::runOnline() {
     }
 
     t1 = high_resolution_clock::now();
-    timer->startSubTask();
+    timer->startSubTask(5, iteration);
     verificationPhase();
     timer->endSubTask(5, iteration);
     t2 = high_resolution_clock::now();
@@ -465,7 +465,7 @@ void ProtocolParty<FieldType>::runOnline() {
     }
 
     t1 = high_resolution_clock::now();
-    timer->startSubTask();
+    timer->startSubTask(6, iteration);
     outputPhase();
     timer->endSubTask(6, iteration);
     t2 = high_resolution_clock::now();

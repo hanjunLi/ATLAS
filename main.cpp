@@ -42,21 +42,13 @@
 int main(int argc, char* argv[])
 {
 
-//    if(argc != 7)
-//    {
-//        cout << "wrong number of arguments. Numer of args = "<< argc;
-//        return 0;
-//    }
-
     CmdParser parser;
     auto parameters = parser.parseArguments("", argc, argv);
     int times = stoi(parameters["internalIterationsNumber"]);
-//
-//    string outputTimerFileName = string(argv[5]) + "Times" + string(argv[1]) + argv[6] + ".csv";
-//    ProtocolTimer p(times, outputTimerFileName);
+
 
     string fieldType = parameters["fieldType"];
-cout<<"fieldType = "<<fieldType<<endl;
+    cout<<"fieldType = "<<fieldType<<endl;
 
     if(fieldType.compare("ZpMersenne") == 0)
     {
@@ -68,8 +60,6 @@ cout<<"fieldType = "<<fieldType<<endl;
 
         auto duration = duration_cast<milliseconds>(t2-t1).count();
         cout << "time in milliseconds for " << times << " runs: " << duration << endl;
-
-
         cout << "end main" << '\n';
 
     }
@@ -83,8 +73,6 @@ cout<<"fieldType = "<<fieldType<<endl;
 
         auto duration = duration_cast<milliseconds>(t2-t1).count();
         cout << "time in milliseconds for " << times << " runs: " << duration << endl;
-
-
         cout << "end main" << '\n';
 
     }
@@ -98,8 +86,6 @@ cout<<"fieldType = "<<fieldType<<endl;
 
         auto duration = duration_cast<milliseconds>(t2 - t1).count();
         cout << "time in milliseconds for " << times << " runs: " << duration << endl;
-
-
         cout << "end main" << '\n';
     }
 
@@ -115,8 +101,6 @@ cout<<"fieldType = "<<fieldType<<endl;
 
         auto duration = duration_cast<milliseconds>(t2-t1).count();
         cout << "time in milliseconds for " << times << " runs: " << duration << endl;
-
-
         cout << "end main" << '\n';
     }
 
@@ -132,8 +116,6 @@ cout<<"fieldType = "<<fieldType<<endl;
 
         auto duration = duration_cast<milliseconds>(t2-t1).count();
         cout << "time in milliseconds for " << times << " runs: " << duration << endl;
-
-
         cout << "end main" << '\n';
 
     }
