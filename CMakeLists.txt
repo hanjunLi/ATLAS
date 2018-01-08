@@ -20,5 +20,4 @@ add_executable(MPCHonestMajorityNoTriples ${SOURCE_FILES})
 
 TARGET_LINK_LIBRARIES(MPCHonestMajorityNoTriples $ENV{HOME}/ntl-9.10.0/src/ntl.a
         $ENV{HOME}/libscapi/libscapi.a gmp gmpxx
-        libjsoncpp.a OTExtensionBristol libsimpleot.a
         libboost_system.a libboost_thread.a pthread crypto dl ssl z)
