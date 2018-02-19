@@ -44,10 +44,10 @@ int main(int argc, char* argv[])
 
     CmdParser parser;
     auto parameters = parser.parseArguments("", argc, argv);
-    int times = stoi(parameters["internalIterationsNumber"]);
+    int times = stoi(parser.getValueByKey(parameters, "internalIterationsNumber"));
 
 
-    string fieldType = parameters["fieldType"];
+    string fieldType = parser.getValueByKey(parameters, "fieldType");
     cout<<"fieldType = "<<fieldType<<endl;
 
     if(fieldType.compare("ZpMersenne") == 0)

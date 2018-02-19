@@ -278,11 +278,11 @@ public:
 template <class FieldType>
 ProtocolParty<FieldType>::ProtocolParty(int argc, char* argv[]) : Protocol("MPCHonestMajorityNoTriples", argc, argv)
 {
-    string circuitFile = arguments["circuitFile"];
-    this->times = stoi(arguments["internalIterationsNumber"]);
-    string fieldType = arguments["fieldType"];
-    m_partyId = stoi(arguments["partyID"]);
-    int n = stoi(arguments["partiesNumber"]);
+    string circuitFile = this->getParser().getValueByKey(arguments, "circuitFile");
+    this->times = stoi(this->getParser().getValueByKey(arguments, "internalIterationsNumber"));
+    string fieldType = this->getParser().getValueByKey(arguments, "fieldType");
+    m_partyId = stoi(this->getParser().getValueByKey(arguments, "partyID"));
+    int n = stoi(this->getParser().getValueByKey(arguments, "partiesNumber"));
     string outputTimerFileName = circuitFile + "Times" + to_string(m_partyId) + fieldType + ".csv";
     ProtocolTimer p(times, outputTimerFileName);
 
@@ -306,8 +306,8 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char* argv[]) : Protocol("MPCH
 
     N = n;
     T = n/2 - 1;
-    this->inputsFile = arguments["inputFile"];
-    this->outputFile = arguments["outputFile"];
+    this->inputsFile = this->getParser().getValueByKey(arguments, "inputFile");
+    this->outputFile = this->getParser().getValueByKey(arguments, "outputFile");
     if(n%2 > 0)
     {
         T++;
@@ -328,8 +328,9 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char* argv[]) : Protocol("MPCH
     //boost::asio::io_service io_service;
 
     MPCCommunication comm;
+    string partiesFile = this->getParser().getValueByKey(arguments, "partiesFile");
 
-    parties = comm.setCommunication(io_service, m_partyId, N, arguments["partiesFile"]);
+    parties = comm.setCommunication(io_service, m_partyId, N, partiesFile);
 
     string tmp = "init times";
     //cout<<"before sending any data"<<endl;
