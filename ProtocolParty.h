@@ -80,7 +80,7 @@ private:
     vector<FieldType> gateShareArr; // my share of the gate (for all gates)
     vector<FieldType> alpha; // N distinct non-zero field elements
 
-    vector<int> myInputs;
+    vector<long> myInputs;
 
 public:
 //    ProtocolParty(int n, int id,string fieldType, string inputsFile, string outputFile, string circuitFile,
@@ -366,7 +366,7 @@ void ProtocolParty<FieldType>::readMyInputs()
 
     //cout<<"inputs file" << inputsFile<<endl;
     ifstream myfile;
-    int input;
+    long input;
     int i =0;
     myfile.open(inputsFile);
     do {
@@ -1200,6 +1200,17 @@ int ProtocolParty<FieldType>::processNotMult(){
 
             count++;
         }
+        else if(circuit.getGates()[k].gateType == SCALAR_ADD)
+        {
+            long scalar(circuit.getGates()[k].input2);
+            FieldType e = field->GetElement(scalar);
+            gateShareArr[circuit.getGates()[k].output*2] = gateShareArr[circuit.getGates()[k].input1*2] + e;
+            gateShareArr[circuit.getGates()[k].output*2+1] = gateShareArr[circuit.getGates()[k].input1*2+1] + e;
+
+
+            count++;
+        }
+
          
 
     }
