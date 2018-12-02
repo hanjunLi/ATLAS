@@ -209,7 +209,6 @@ public:
     void generateRandomSharesWithCheck(int numOfRnadoms, vector<FieldType>& randomElementsToFill);
     void generateRandom2TAndTShares(int numOfRandomPairs, vector<FieldType>& randomElementsToFill);
 
-
     /**
      * Check whether given points lie on polynomial of degree d.
      * This check is performed by interpolating x on the first d + 1 positions of α and check the remaining positions.
