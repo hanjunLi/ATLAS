@@ -5,39 +5,38 @@
 #ifndef SECRET_SHARING_PROTOCOLTIMER_H
 #define SECRET_SHARING_PROTOCOLTIMER_H
 
-#include <iostream>
-#include <fstream>
-#include <string>
 #include <chrono>
+#include <fstream>
+#include <iostream>
+#include <string>
 
 using namespace std;
 
 class ProtocolTimer {
 
 public:
+  int *preparationPhaseArr;
+  int *inputPreparationArr;
+  int *computationPhaseArr;
+  int *verificationPhaseArr;
+  int *outputPhaseArr;
+  int *totalTimeArr;
 
-    int *preparationPhaseArr;
-    int* inputPreparationArr;
-    int* computationPhaseArr;
-    int* verificationPhaseArr;
-    int* outputPhaseArr;
-    int* totalTimeArr;
+  string fileName;
+  int times;
 
-    string fileName;
-    int times;
+  ProtocolTimer(int times, string fileName);
 
-    ProtocolTimer(int times, string fileName);
+  ~ProtocolTimer() {
+    delete[] preparationPhaseArr;
+    delete[] inputPreparationArr;
+    delete[] verificationPhaseArr;
+    delete[] computationPhaseArr;
+    delete[] outputPhaseArr;
+    delete[] totalTimeArr;
+  }
 
-    ~ProtocolTimer(){ delete[] preparationPhaseArr;
-                      delete[] inputPreparationArr;
-                      delete[] verificationPhaseArr;
-                      delete[] computationPhaseArr;
-                      delete[] outputPhaseArr;
-                      delete[] totalTimeArr;}
-
-    void writeToFile();
-
+  void writeToFile();
 };
 
-
-#endif //SECRET_SHARING_PROTOCOLTIMER_H
+#endif // SECRET_SHARING_PROTOCOLTIMER_H
