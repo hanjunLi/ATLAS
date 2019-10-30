@@ -290,7 +290,7 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char* argv[]) : Protocol("MPCH
     vector<string> subTaskNames{"Offline", "preparationPhase", "Online", "inputPhase", "ComputePhase", "VerificationPhase", "outputPhase"};
     timer = new Measurement(*this, subTaskNames);
 
-    if(fieldType.compare("ZpMersenne") == 0) {
+    if(fieldType.compare("ZpMersenne31") == 0) {
         field = new TemplateField<FieldType>(2147483647);
     } else if(fieldType.compare("ZpMersenne61") == 0) {
         field = new TemplateField<FieldType>(0);

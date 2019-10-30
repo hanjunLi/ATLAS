@@ -29,6 +29,7 @@ public:
 
     ZpKaratsubaElement& operator=(const ZpKaratsubaElement& other);
     inline bool operator!=(const ZpKaratsubaElement& other){ return !(other.elem == elem); };
+    inline bool operator==(const ZpKaratsubaElement& other){ return (other.elem == elem); };
 
     ZpKaratsubaElement& operator+=(const ZpKaratsubaElement& f2);
     ZpKaratsubaElement& operator*=(const ZpKaratsubaElement& f2);
