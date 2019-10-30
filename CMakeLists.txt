@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 project(MPCHonestMajorityNoTriples)
 
-
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -std=c++11 -maes -mpclmul -mbmi2")
 
 INCLUDE_DIRECTORIES($ENV{HOME}/ntl-11.4.1/include $ENV{HOME} $ENV{HOME}/libscapi/install/include
