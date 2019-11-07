@@ -32,54 +32,63 @@ template <class FieldType>
 class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 
 private:
-  /**
-   * N - number of parties
-   * M - number of gates
-   * T - number of malicious
-   */
+  // -- global const
+  int numThreads = 1;           // TODO: add as main arguments later
+  
+  // -- global variables
+  int iteration;                       // current iteration number
+  int randomSharesOffset = 0;          // next random share to use
+  vector<FieldType> y_for_interpolate; // size = N
+  boost::asio::io_service io_service;
 
-  int N, M, T, m_partyId;
-  int times;     // number of times to run the run function
-  int iteration; // number of the current iteration
-
+  // -- set in constructor
+  int times;                // number of times to run the run function
   Measurement *timer;
-  VDM<FieldType> matrix_vand;
-  TemplateField<FieldType> *field;
-  vector<shared_ptr<ProtocolPartyData>> parties;
-  vector<FieldType> randomTAnd2TShares;
-  vector<FieldType> randomSharesArray;
-  vector<FieldType> bigR;
-  vector<byte> h; // a string accumulated that should be hashed in the comparing
-                  // views function.
-
+  TemplateField<FieldType> *field; // used to call some field functions
   ProtocolTimer *protocolTimer;
-  int currentCirciutLayer = 0;
-  int offset = 0;
-  int randomSharesOffset = 0;
-
-  string s;
-  int numOfInputGates, numOfOutputGates;
+  // N, T - number of parties, malicious
+  int N, T, m_partyId;  
+  string s;                     // string of my_partyId
   string inputsFile, outputFile;
-  vector<FieldType> beta;
+  ArithmeticCircuit circuit;
+  // M - number of gates
+  int M, numOfInputGates, numOfOutputGates, numOfMultGates;
+  vector<long> myInputs;
+  vector<shared_ptr<ProtocolPartyData>> parties;
+
+  // -- set in initialization phase
+  vector<FieldType> bigR;         // a single random element
+  vector<FieldType> beta;         // a single zero element
+  vector<FieldType> alpha;        // N distinct non-zero field elements
   HIM<FieldType> matrix_for_interpolate;
+  // HIM<FieldType> m;
+  // HIM<FieldType> matrix_him;
   HIM<FieldType> matrix_for_t;
   HIM<FieldType> matrix_for_2t;
-  vector<FieldType> y_for_interpolate;
+  VDM<FieldType> matrix_vand;
+  VDMTranspose<FieldType> matrix_vand_transpose;  
 
-  HIM<FieldType> matrix_him;
+  // -- filled during offline-preparation phase
+  vector<FieldType> randomSharesArray; // used as seed for AES PRG
+  vector<FieldType> randomTAnd2TShares; // used for DN mult
 
-  VDMTranspose<FieldType> matrix_vand_transpose;
+  
+  vector<FieldType> gateShareArr; // my share of each gate (2 shares each)
+  
+  
 
-  HIM<FieldType> m;
+  
+  
 
-  boost::asio::io_service io_service;
-  ArithmeticCircuit circuit;
+  vector<byte> h; // a string accumulated that should be hashed in the comparing
+                  // views function.
+  int currentCirciutLayer = 0;
+  int offset = 0;
+  
   vector<FieldType>
       gateValueArr; // the value of the gate (for my input and output gates)
-  vector<FieldType> gateShareArr; // my share of the gate (for all gates)
-  vector<FieldType> alpha;        // N distinct non-zero field elements
-
-  vector<long> myInputs;
+  
+  
 
 public:
   //    ProtocolParty(int n, int id,string fieldType, string inputsFile, string
@@ -102,9 +111,7 @@ public:
   void sendDataFromP1(vector<byte> &sendBuf, int first, int last);
   void sendFromP1(vector<byte> &sendBuf);
 
-  int counter = 0;
-
-  /**
+    /**
    * This method runs the protocol:
    * 1. Preparation Phase
    * 2. Input Phase
@@ -196,7 +203,7 @@ public:
   void DNHonestMultiplication(FieldType *a, FieldType *b,
                               vector<FieldType> &cToFill, int numOfTrupples);
 
-  void offlineDNForMultiplication(int numOfTriples);
+  void offlineDNForMultiplication(int numOfDoubleShares);
 
   /**
    * The input phase proceeds in two steps:
@@ -244,7 +251,7 @@ public:
    * process all random gates, then alternately process addition and
    * multiplication gates.
    */
-  void computationPhase(HIM<FieldType> &m);
+  void computationPhase();
 
   /**
    * The cheap way: Create a HIM from the αi’s onto ZERO (this is actually a row
@@ -285,65 +292,52 @@ public:
 template <class FieldType>
 ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
     : Protocol("MPCHonestMajorityNoTriples", argc, argv) {
-  string circuitFile =
-      this->getParser().getValueByKey(arguments, "circuitFile");
+  // -- initialize protocol parameters
   this->times = stoi(
       this->getParser().getValueByKey(arguments, "internalIterationsNumber"));
-  string fieldType = this->getParser().getValueByKey(arguments, "fieldType");
-  m_partyId = stoi(this->getParser().getValueByKey(arguments, "partyID"));
-  int n = stoi(this->getParser().getValueByKey(arguments, "partiesNumber"));
-  string outputTimerFileName =
-      circuitFile + "Times" + to_string(m_partyId) + fieldType + ".csv";
-  ProtocolTimer p(times, outputTimerFileName);
-
-  this->protocolTimer = new ProtocolTimer(times, outputTimerFileName);
-
   vector<string> subTaskNames{
       "Offline",      "preparationPhase",  "Online",     "inputPhase",
       "ComputePhase", "VerificationPhase", "outputPhase"};
-  timer = new Measurement(*this, subTaskNames);
-
+  this->timer = new Measurement(*this, subTaskNames);
+  string fieldType = this->getParser().getValueByKey(arguments, "fieldType");
   if (fieldType.compare("ZpMersenne31") == 0) {
-    field = new TemplateField<FieldType>(2147483647);
+    this->field = new TemplateField<FieldType>(2147483647);
   } else if (fieldType.compare("ZpMersenne61") == 0) {
-    field = new TemplateField<FieldType>(0);
+    this->field = new TemplateField<FieldType>(0);
   } else if (fieldType.compare("ZpKaratsuba") == 0) {
-    field = new TemplateField<FieldType>(0);
+    this->field = new TemplateField<FieldType>(0);
   } else if (fieldType.compare("GF2E") == 0) {
-    field = new TemplateField<FieldType>(8);
+    this->field = new TemplateField<FieldType>(8);
   } else if (fieldType.compare("Zp") == 0) {
-    field = new TemplateField<FieldType>(2147483647);
+    this->field = new TemplateField<FieldType>(2147483647);
   }
-
-  N = n;
-  T = n / 2 - 1;
+  string circuitFile =
+    this->getParser().getValueByKey(arguments, "circuitFile");
+  string outputTimerFileName =
+    circuitFile + "Times" + to_string(m_partyId) + fieldType + ".csv";
+  this->protocolTimer = new ProtocolTimer(times, outputTimerFileName);
+  this->N = stoi(this->getParser().getValueByKey(arguments, "partiesNumber"));
+  this->T = (this->N - 1)/ 2;
+  this->m_partyId = stoi(this->getParser().getValueByKey(arguments, "partyID"));
+  this->s = to_string(m_partyId);
   this->inputsFile = this->getParser().getValueByKey(arguments, "inputFile");
   this->outputFile = this->getParser().getValueByKey(arguments, "outputFile");
-  if (n % 2 > 0) {
-    T++;
-  }
-
-  s = to_string(m_partyId);
-  circuit.readCircuit(circuitFile.c_str());
-  circuit.reArrangeCircuit();
-  M = circuit.getNrOfGates();
-  numOfInputGates = circuit.getNrOfInputGates();
-  numOfOutputGates = circuit.getNrOfOutputGates();
-  myInputs.resize(numOfInputGates);
-  counter = 0;
-
-  // comm->ConnectionToServer(s);
-
-  // boost::asio::io_service io_service;
-
+  this->circuit.readCircuit(circuitFile.c_str());
+  this->circuit.reArrangeCircuit();
+  this->M = circuit.getNrOfGates();
+  this->numOfInputGates = circuit.getNrOfInputGates();
+  this->numOfOutputGates = circuit.getNrOfOutputGates();
+  this->numOfMultGates = circuit.getNrOfMultiplicationGates();
+  this->myInputs.resize(numOfInputGates);
+  readMyInputs();
   MPCCommunication comm;
   string partiesFile =
       this->getParser().getValueByKey(arguments, "partiesFile");
-
-  parties = comm.setCommunication(io_service, m_partyId, N, partiesFile);
-
+  this->parties =
+    comm.setCommunication(this->io_service, m_partyId, N, partiesFile);
+  
+  // -- test communication
   string tmp = "init times";
-  // cout<<"before sending any data"<<endl;
   byte tmpBytes[20];
   for (int i = 0; i < parties.size(); i++) {
     if (parties[i]->getID() < m_partyId) {
@@ -355,11 +349,9 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
     }
   }
 
-  readMyInputs();
-
+  // -- initialize phase
   auto t1 = high_resolution_clock::now();
-  initializationPhase(/*matrix_him, matrix_vand, m*/);
-
+  initializationPhase();
   auto t2 = high_resolution_clock::now();
 
   auto duration = duration_cast<milliseconds>(t2 - t1).count();
@@ -369,16 +361,21 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
 }
 
 template <class FieldType> void ProtocolParty<FieldType>::readMyInputs() {
-
-  // cout<<"inputs file" << inputsFile<<endl;
+  
   ifstream myfile;
   long input;
   int i = 0;
-  myfile.open(inputsFile);
+  myfile.open(this->inputsFile);
   do {
     myfile >> input;
-    myInputs[i] = input;
-    i++;
+
+    if (i >= myInputs.size()){
+      cout << "inputs file " << this->inputsFile <<endl;
+      cout << "have more than " << (i+1) << " inputs!" << endl;
+      abort();
+    }
+    
+    myInputs[i++] = input;
   } while (!(myfile.eof()));
   myfile.close();
 }
@@ -394,11 +391,10 @@ template <class FieldType> void ProtocolParty<FieldType>::run() {
     timer->startSubTask("Online", iteration);
     runOnline();
     timer->endSubTask("Online", iteration);
-
     auto t2end = high_resolution_clock::now();
+
     auto duration = duration_cast<milliseconds>(t2end - t1start).count();
     protocolTimer->totalTimeArr[iteration] = duration;
-
     cout << "time in milliseconds for protocol: " << duration << endl;
   }
 }
@@ -408,12 +404,12 @@ template <class FieldType> void ProtocolParty<FieldType>::runOffline() {
   timer->startSubTask("preparationPhase", iteration);
   if (preparationPhase() == false) {
     if (flag_print) {
-      cout << "cheating!!!" << '\n';
+      cout << "preparationPhase failed" << '\n';
     }
     return;
   } else {
     if (flag_print) {
-      cout << "no cheating!!!" << '\n' << "finish Preparation Phase" << '\n';
+      cout << "finish Preparation Phase" << '\n';
     }
   }
   timer->endSubTask("preparationPhase", iteration);
@@ -442,7 +438,7 @@ template <class FieldType> void ProtocolParty<FieldType>::runOnline() {
 
   t1 = high_resolution_clock::now();
   timer->startSubTask("ComputePhase", iteration);
-  computationPhase(m);
+  computationPhase();
   timer->endSubTask("ComputePhase", iteration);
   t2 = high_resolution_clock::now();
 
@@ -480,7 +476,7 @@ template <class FieldType> void ProtocolParty<FieldType>::runOnline() {
 }
 
 template <class FieldType>
-void ProtocolParty<FieldType>::computationPhase(HIM<FieldType> &m) {
+void ProtocolParty<FieldType>::computationPhase() {
   int count = 0;
   int countNumMult = 0;
   int countNumMultForThisLayer = 0;
@@ -677,123 +673,73 @@ void ProtocolParty<FieldType>::generateRandomSharesWithCheck(
 template <class FieldType>
 void ProtocolParty<FieldType>::generateRandomShares(
     int numOfRandoms, vector<FieldType> &randomElementsToFill) {
-  int index = 0;
-  vector<vector<byte>> recBufsBytes(N);
-  int robin = 0;
-  int no_random = numOfRandoms;
-
-  vector<FieldType> x1(N), y1(N), x2(N), y2(N), t1(N), r1(N), t2(N), r2(N);
-  ;
-
-  vector<vector<FieldType>> sendBufsElements(N);
-  vector<vector<byte>> sendBufsBytes(N);
-
-  // the number of buckets (each bucket requires one double-sharing
-  // from each party and gives N-2T random double-sharings)
-  int no_buckets = (no_random / (N - T)) + 1;
-
-  // sharingBufTElements.resize(no_buckets*(N-2*T)); // my shares of the
-  // double-sharings sharingBuf2TElements.resize(no_buckets*(N-2*T)); // my
-  // shares of the double-sharings
-
-  // maybe add some elements if a partial bucket is needed
+  // -- allocate communication buffers
+  vector<FieldType> x1(N), y1(N), t1(N), r1(N);
+  // every round N-T random shares are generated.
+  int fieldByteSize = field->getElementSizeInBytes();
+  int no_buckets = (numOfRandoms / (N - T)) + 1;
   randomElementsToFill.resize(no_buckets * (N - T));
-
+  // N vectors of no_buckets size
+  vector<vector<FieldType>> sendBufsElements(N);
+  // N vectors of no_buckets elements in bytes
+  vector<vector<byte>> sendBufsBytes(N);
+  vector<vector<byte>> recBufsBytes(N);
   for (int i = 0; i < N; i++) {
     sendBufsElements[i].resize(no_buckets);
-    sendBufsBytes[i].resize(no_buckets * field->getElementSizeInBytes());
-    recBufsBytes[i].resize(no_buckets * field->getElementSizeInBytes());
+    sendBufsBytes[i].resize(no_buckets * fieldByteSize);
+    recBufsBytes[i].resize(no_buckets * fieldByteSize);
   }
 
-  /**
-   *  generate random sharings.
-   *  first degree t.
-   *
-   */
+  // -- generate no_buckets number of random t-sharings
   for (int k = 0; k < no_buckets; k++) {
-    // generate random degree-T polynomial
+    // generate random degree-T polynomial (T+1 ... N positions are zero)
     for (int i = 0; i < T + 1; i++) {
-      // A random field element, uniform distribution, note that x1[0] is the
-      // secret which is also random
       x1[i] = field->Random();
     }
-
-    matrix_vand.MatrixMult(x1, y1, T + 1); // eval poly at alpha-positions
+    // evaluate using vandermonde matrix (over alpha)
+    matrix_vand.MatrixMult(x1, y1, T + 1);
 
     // prepare shares to be sent
     for (int i = 0; i < N; i++) {
-      // cout << "y1[ " <<i<< "]" <<y1[i] << endl;
       sendBufsElements[i][k] = y1[i];
     }
   }
-
-  if (flag_print) {
-    for (int i = 0; i < N; i++) {
-      for (int k = 0; k < sendBufsElements[0].size(); k++) {
-
-        // cout << "before roundfunction4 send to " <<i <<" element: "<< k << "
-        // " << sendBufsElements[i][k] << endl;
-      }
-    }
-    cout << "sendBufs" << endl;
-    cout << "N" << N << endl;
-    cout << "T" << T << endl;
-  }
-
-  int fieldByteSize = field->getElementSizeInBytes();
+  // -- convert random elements to bytes
   for (int i = 0; i < N; i++) {
-    //        for(int j=0; j<sendBufsElements[i].size();j++) {
-    //            field->elementToBytes(sendBufsBytes[i].data() + (j *
-    //            fieldByteSize), sendBufsElements[i][j]);
-    //        }
-
-    field->elementVectorToByteVector(sendBufsElements[i], sendBufsBytes[i]);
-  }
-
-  roundFunctionSync(sendBufsBytes, recBufsBytes, 4);
-
-  if (flag_print) {
-    for (int i = 0; i < N; i++) {
-      for (int k = 0; k < sendBufsBytes[0].size(); k++) {
-
-        cout << "roundfunction4 send to " << i << " element: " << k << " "
-             << (int)sendBufsBytes[i][k] << endl;
-      }
-    }
-    for (int i = 0; i < N; i++) {
-      for (int k = 0; k < recBufsBytes[0].size(); k++) {
-        cout << "roundfunction4 receive from " << i << " element: " << k << " "
-             << (int)recBufsBytes[i][k] << endl;
-      }
+    for (int j = 0; j < no_buckets; j++) {
+      field->elementToBytes(sendBufsBytes[i].data() + j*fieldByteSize,
+                            sendBufsElements[i][j]);
     }
   }
-
+  // -- exchange elements all-to-all
+  roundFunctionSync(sendBufsBytes, recBufsBytes, 4); // round 4
+  // -- convert bytes to random elements and extract to result
+  int index = 0;
   for (int k = 0; k < no_buckets; k++) {
     for (int i = 0; i < N; i++) {
-      t1[i] =
-          field->bytesToElement(recBufsBytes[i].data() + (k * fieldByteSize));
+      t1[i] = field->bytesToElement(recBufsBytes[i].data() +
+                                    (k * fieldByteSize));
     }
     matrix_vand_transpose.MatrixMult(t1, r1, N - T);
-
     // copy the resulting vector to the array of randoms
     for (int i = 0; i < N - T; i++) {
-
-      randomElementsToFill[index] = r1[i];
-      index++;
+      randomElementsToFill[index++] = r1[i];
     }
   }
 }
+
 template <class FieldType>
 void ProtocolParty<FieldType>::getRandomShares(
     int numOfRandoms, vector<FieldType> &randomElementsToFill) {
 
   randomElementsToFill.assign(randomSharesArray.begin() + randomSharesOffset,
                               randomSharesArray.begin() + randomSharesOffset +
-                                  numOfRandoms);
+                              numOfRandoms);
 
   randomSharesOffset += numOfRandoms;
 }
 
+// TODO start here
 template <class FieldType>
 void ProtocolParty<FieldType>::generateRandom2TAndTShares(
     int numOfRandomPairs, vector<FieldType> &randomElementsToFill) {
@@ -931,103 +877,69 @@ void ProtocolParty<FieldType>::generateRandom2TAndTShares(
   batchConsistencyCheckOfShares(randomElementsOnlyTshares);
 }
 
-/**
- * some global variables are initialized
- * @param GateValueArr
- * @param GateShareArr
- * @param matrix_him
- * @param matrix_vand
- * @param alpha
- */
 template <class FieldType>
 void ProtocolParty<FieldType>::initializationPhase() {
-  bigR.resize(1);
-  beta.resize(1);
-  y_for_interpolate.resize(N);
-  gateShareArr.resize((M - circuit.getNrOfOutputGates()) *
-                      2); // my share of the gate (for all gates)
-  alpha.resize(N);        // N distinct non-zero field elements
-  vector<FieldType> alpha1(N - T);
-  vector<FieldType> alpha2(T);
+  // -- allocate spaces for protocol storage
+  this->y_for_interpolate.resize(N);
+  this->gateShareArr.resize((M - this->circuit.getNrOfOutputGates()) *2);
 
-  beta[0] = field->GetElement(0); // zero of the field
-  matrix_for_interpolate.allocate(1, N, field);
-
-  matrix_him.allocate(N, N, field);
-  matrix_vand.allocate(N, N, field);
-  matrix_vand_transpose.allocate(N, N, field);
-  m.allocate(T, N - T, field);
-
-  // Compute Vandermonde matrix VDM[i,k] = alpha[i]^k
-  matrix_vand.InitVDM();
-  matrix_vand_transpose.InitVDMTranspose();
-
-  // Prepare an N-by-N hyper-invertible matrix
-  matrix_him.InitHIM();
-
-  // N distinct non-zero field elements
+  // -- initialize protocol parameters
+  this->bigR.resize(1);
+  this->beta.resize(1);
+  this->beta[0] = field->GetElement(0); // zero of the field
+  this->alpha.resize(N);
   for (int i = 0; i < N; i++) {
-    alpha[i] = field->GetElement(i + 1);
+    this->alpha[i] = field->GetElement(i + 1);
   }
+  this->matrix_for_interpolate.allocate(1, N, field);
+  this->matrix_for_interpolate.InitHIMByVectors(alpha, beta);
+  
+  // vector<FieldType> alpha1(N - T);
+  // vector<FieldType> alpha2(T);
+  // for (int i = 0; i < N - T; i++) {
+  //   alpha1[i] = alpha[i];
+  // }
+  // for (int i = N - T; i < N; i++) {
+  //   alpha2[i - (N - T)] = alpha[i];
+  // }
+  // m.allocate(T, N - T, field);
+  // m.InitHIMByVectors(alpha1, alpha2);
 
-  for (int i = 0; i < N - T; i++) {
-    alpha1[i] = alpha[i];
-  }
-  for (int i = N - T; i < N; i++) {
-    alpha2[i - (N - T)] = alpha[i];
-  }
-
-  m.InitHIMByVectors(alpha1, alpha2);
-
-  matrix_for_interpolate.InitHIMByVectors(alpha, beta);
-
-  vector<FieldType> alpha_until_t(T + 1);
-  vector<FieldType> alpha_from_t(N - 1 - T);
-
+  // matrix_him.allocate(N, N, field);
+  // matrix_him.InitHIM();
+  
   // Interpolate first d+1 positions of (alpha,x)
-  matrix_for_t.allocate(N - 1 - T, T + 1,
-                        field); // slices, only positions from 0..d
-  // matrix_for_t.InitHIMByVectors(alpha_until_t, alpha_from_t);
+  matrix_for_t.allocate(N - 1 - T, T + 1, field); 
+  // slices, only positions from 0..d
   matrix_for_t.InitHIMVectorAndsizes(alpha, T + 1, N - T - 1);
 
-  vector<FieldType> alpha_until_2t(2 * T + 1);
-  vector<FieldType> alpha_from_2t(N - 1 - 2 * T);
-
   // Interpolate first d+1 positions of (alpha,x)
-  matrix_for_2t.allocate(N - 1 - 2 * T, 2 * T + 1,
-                         field); // slices, only positions from 0..d
-  // matrix_for_2t.InitHIMByVectors(alpha_until_2t, alpha_from_2t);
-  matrix_for_2t.InitHIMVectorAndsizes(alpha, 2 * T + 1, N - (2 * T + 1));
+  matrix_for_2t.allocate(N - 1 - 2*T, 2*T + 1, field);
+  // slices, only positions from 0..d
+  matrix_for_2t.InitHIMVectorAndsizes(alpha, 2*T + 1, N - 1 - 2*T);
 
-  if (flag_print) {
-    cout << "matrix_for_t : " << endl;
-    matrix_for_t.Print();
-
-    cout << "matrix_for_2t : " << endl;
-    matrix_for_2t.Print();
-  }
+  this->matrix_vand.allocate(N, N, field);
+  this->matrix_vand.InitVDM(); // default to alpha as defined
+  this->matrix_vand_transpose.allocate(N, N, field);
+  this->matrix_vand_transpose.InitVDMTranspose();
 }
 
 template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
   int iterations =
       (5 + field->getElementSizeInBytes() - 1) / field->getElementSizeInBytes();
   int keysize = 16 / field->getElementSizeInBytes() + 1;
-
   int numOfRandomShares = 5 * keysize + 3 * iterations + 1;
-  randomSharesArray.resize(numOfRandomShares);
+  this->randomSharesArray.resize(numOfRandomShares);
 
-  randomSharesOffset = 0;
-  // generate enough random shares for the AES key
-  generateRandomShares(numOfRandomShares, randomSharesArray);
+  // -- generate random shares for the AES key
+  this->randomSharesOffset = 0;
+  generateRandomShares(numOfRandomShares, this->randomSharesArray);
 
-  // run offline for all the future multiplications including the multiplication
-  // of the protocol
-
-  offset = 0;
-  offlineDNForMultiplication((circuit.getNrOfInputGates() +
-                              circuit.getNrOfMultiplicationGates() * 2 + 1) *
-                             iterations);
-
+  // -- generate t-shareing and 2t-sharings for DN mult to use
+  this->offset = 0;
+  int numDoubleShares =
+    (this->numOfInputGates + this->numOfMultGates * 2 + 1) * iterations;
+  offlineDNForMultiplication(numDoubleShares);
   return true;
 }
 
@@ -1469,9 +1381,10 @@ void ProtocolParty<FieldType>::DNHonestMultiplication(
 }
 
 template <class FieldType>
-void ProtocolParty<FieldType>::offlineDNForMultiplication(int numOfTriples) {
-
-  generateRandom2TAndTShares(numOfTriples, randomTAnd2TShares);
+void ProtocolParty<FieldType>::
+offlineDNForMultiplication(int numOfDoubleShares) {
+  generateRandom2TAndTShares(numOfDoubleShares,
+                             this->randomTAnd2TShares);
 }
 
 template <class FieldType> void ProtocolParty<FieldType>::verificationPhase() {
@@ -1849,21 +1762,18 @@ template <class FieldType>
 void ProtocolParty<FieldType>::roundFunctionSync(vector<vector<byte>> &sendBufs,
                                                  vector<vector<byte>> &recBufs,
                                                  int round) {
-
-  // cout<<"in roundFunctionSync "<< round<< endl;
-
-  int numThreads = 10; // parties.size();
+  // -- assign works to threads
   int numPartiesForEachThread;
-
   if (parties.size() <= numThreads) {
     numThreads = parties.size();
     numPartiesForEachThread = 1;
   } else {
     numPartiesForEachThread = (parties.size() + numThreads - 1) / numThreads;
   }
-
+  
+  // -- recieve the data using threads
+  // direct send to myself
   recBufs[m_partyId] = move(sendBufs[m_partyId]);
-  // recieve the data using threads
   vector<thread> threads(numThreads);
   for (int t = 0; t < numThreads; t++) {
     if ((t + 1) * numPartiesForEachThread <= parties.size()) {
@@ -1926,7 +1836,6 @@ void ProtocolParty<FieldType>::roundFunctionSyncBroadcast(
 
   // cout<<"in roundFunctionSyncBroadcast "<< endl;
 
-  int numThreads = 10; // parties.size();
   int numPartiesForEachThread;
 
   if (parties.size() <= numThreads) {
