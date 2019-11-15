@@ -303,14 +303,13 @@ template <class FieldType> void ProtocolParty<FieldType>::runOnline() {
 
 template <class FieldType>
 void ProtocolParty<FieldType>::computationPhase() {
-  int countNumMult = this->offset;
-  int countNumMultForThisLayer = 0;
+  int countNumMult = this->offset / 2;
   int numOfLayers = circuit.getLayers().size();
   for (int i = 0; i < numOfLayers - 1; i++) {
     currentCircuitLayer = i;
     // send the index of the current mult gate
-    countNumMultForThisLayer = processMultiplications(countNumMult);
-    countNumMult += countNumMultForThisLayer;
+    processNotMult();
+    countNumMult += processMultiplications(countNumMult);
   }
   this->offset = countNumMult;
 }
