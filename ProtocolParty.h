@@ -2,7 +2,6 @@
 #define PROTOCOLPARTY_H_
 
 #include <stdlib.h>
-
 #include "HashEncrypt.h"
 #include "ProtocolTimer.h"
 #include <bitset>
@@ -63,11 +62,13 @@ private:
   vector<FieldType> beta;         // a single zero element
   vector<FieldType> alpha;        // N distinct non-zero field elements
   HIM<FieldType> matrix_for_interpolate;
+  HIM<FieldType> matrix_for_t;
+  HIM<FieldType> matrix_for_2t;  
   VDM<FieldType> matrix_vand;
   VDMTranspose<FieldType> matrix_vand_transpose;  
 
   // -- filled during offline-preparation phase
-  // vector<FieldType> randomSharesArray;  // used as seed for AES PRG
+  vector<FieldType> randomSharesArray;  // used as seed for AES PRG
   vector<FieldType> randomTAnd2TShares; // used for DN mult
   vector<FieldType> gateShareArr; // my share of each gate (1 share each)
   vector<FieldType> gateValueArr; // the value for my input and output
@@ -96,8 +97,6 @@ public:
   int processMultDN(int indexInRandomArray);
   
   void verificationPhase();
-  bool verificationBatched(FieldType *x, FieldType *randomElements,
-                           int numOfTriples);
   bool comparingViews();        // TODO: most likely not needed
   void outputPhase();
   
@@ -112,16 +111,24 @@ public:
   void sendDataFromP1(vector<byte> &sendBuf, int first, int last);
 
   // -- secret sharing functionalities
-  // void generateRandomShares(int numOfRandoms,
-  //                           vector<FieldType> &randomElementsToFill);
+  void generateRandomShares(int numOfRandoms,
+                            vector<FieldType> &randomElementsToFill);
   void generateRandom2TAndTShares(int numOfRandomPairs,
                                   vector<FieldType> &randomElementsToFill);
+  void batchConsistencyCheckOfShares(const vector<FieldType> &inputShares);
   void openShare(int numOfRandomShares, vector<FieldType> &Shares,
                  vector<FieldType> &secrets);
 
   // --  helper functions
-  // void getRandomShares(int numOfRandoms,
-  //                      vector<FieldType> &randomElementsToFill);
+  void getRandomShares(int numOfRandoms,
+                       vector<FieldType> &randomElementsToFill);
+  void getRandomSharesWithCheck(int numOfRnadoms,
+                                vector<FieldType> &randomElementsToFill);
+  vector<byte> generateCommonKey();
+  void generatePseudoRandomElements(vector<byte> &aesKey,
+                                    vector<FieldType> &randomElementsToFill,
+                                    int numOfRandomElements);
+  bool checkConsistency(vector<FieldType> &x, int d);
   // locally interpolate received sharing
   FieldType reconstructShare(vector<FieldType> &x, int d);
   FieldType interpolate(vector<FieldType> &x);
@@ -288,6 +295,18 @@ template <class FieldType> void ProtocolParty<FieldType>::runOnline() {
   }
 
   t1 = high_resolution_clock::now();
+  timer->startSubTask("VerificationPhase", iteration);
+  verificationPhase();
+  timer->endSubTask("VerificationPhase", iteration);
+  t2 = high_resolution_clock::now();
+  duration = duration_cast<milliseconds>(t2 - t1).count();
+  protocolTimer->verificationPhaseArr[iteration] = duration;
+
+  if (flag_print_timings) {
+    cout << "time in milliseconds verificationPhase: " << duration << endl;
+  }
+
+  t1 = high_resolution_clock::now();
   timer->startSubTask("outputPhase", iteration);
   outputPhase();
   timer->endSubTask("outputPhase", iteration);
@@ -313,6 +332,37 @@ void ProtocolParty<FieldType>::computationPhase() {
   }
   this->offset = countNumMult;
 }
+
+template <class FieldType>
+void ProtocolParty<FieldType>::verificationPhase() {
+  vector<FieldType> aShares(this->numOfMultGates);
+  vector<FieldType> bShares(this->numOfMultGates);
+  vector<FieldType> cShares(this->numOfMultGates);
+
+  // -- gather all mult triples to be verified
+  int idx = 0;
+  for (auto& gate : this->circuit.getGate()) {
+    if(gate.gateType == MULT) {
+      aShares[idx] = gateShareArr[gate.input1];
+      bShares[idx] = gateShareArr[gate.input2];
+      cShares[idx] = gateShareArr[gate.output];
+      idx++;
+    }
+  }
+
+  // -- append random shares a_N, b_N
+  vector<FieldType> twoRandShares(2);
+  getRandomSharesWithCheck(2, twoRandShares);
+  aShares.push_back(twoRandShares[0]);
+  bShares.push_back(twoRandShares[1]);
+
+  // -- prepare HIM matrices for evaluating A(N+1, ..., 2N-1)
+  // -- it's  N-1 row, N cols (N = numMultGates + 1)
+  vector<FieldType> alpha_tmp(this->numMultGates+1);
+  vector<FieldType> beta_tmp(this->numMultGates);
+  // TODO Start from here: what batch size to use? FFT for interpolation?
+}
+
 
 /**
  * the function implements the second step of Input Phase:
@@ -388,84 +438,96 @@ template <class FieldType> void ProtocolParty<FieldType>::inputPhase() {
   for (int i = 0; i < N; i++) {
     counters[i] = 0;
   }
+  vector<FieldType> inputShares(this->numOfInputGates);
   for (int k = 0; k < this->numOfInputGates; k++) {
     if (circuit.getGates()[k].gateType == INPUT) {
       auto share = recBufElements[circuit.getGates()[k].party]
                                  [counters[circuit.getGates()[k].party]];
       counters[circuit.getGates()[k].party] += 1;
       gateShareArr[circuit.getGates()[k].output] = share;
+      inputShares[k] = share;
+    }
+  }
+  inputVerification(inputShares);
+}
+
+template <class FieldType>
+void ProtocolParty<FieldType>::generateRandomShares(
+    int numOfRandoms, vector<FieldType> &randomElementsToFill) {
+  // -- allocate communication buffers
+  vector<FieldType> x1(N), y1(N), t1(N), r1(N);
+  // every round N-T random shares are generated.
+  int fieldByteSize = field->getElementSizeInBytes();
+  int no_buckets = (numOfRandoms / (N - T)) + 1;
+  randomElementsToFill.resize(no_buckets * (N - T));
+  // N vectors of no_buckets size
+  vector<vector<FieldType>> sendBufsElements(N);
+  // N vectors of no_buckets elements in bytes
+  vector<vector<byte>> sendBufsBytes(N);
+  vector<vector<byte>> recBufsBytes(N);
+  for (int i = 0; i < N; i++) {
+    sendBufsElements[i].resize(no_buckets);
+    sendBufsBytes[i].resize(no_buckets * fieldByteSize);
+    recBufsBytes[i].resize(no_buckets * fieldByteSize);
+  }
+
+  // -- generate no_buckets number of random t-sharings
+  for (int k = 0; k < no_buckets; k++) {
+    // generate random degree-T polynomial (T+1 ... N positions are zero)
+    for (int i = 0; i < T + 1; i++) {
+      x1[i] = field->Random();
+    }
+    // evaluate using vandermonde matrix (over alpha)
+    matrix_vand.MatrixMult(x1, y1, T + 1);
+
+    // prepare shares to be sent
+    for (int i = 0; i < N; i++) {
+      sendBufsElements[i][k] = y1[i];
+    }
+  }
+  // -- convert random elements to bytes
+  for (int i = 0; i < N; i++) {
+    for (int j = 0; j < no_buckets; j++) {
+      field->elementToBytes(sendBufsBytes[i].data() + j*fieldByteSize,
+                            sendBufsElements[i][j]);
+    }
+  }
+  // -- exchange elements all-to-all
+  roundFunctionSync(sendBufsBytes, recBufsBytes, 4); // round 4
+  // -- convert bytes to random elements and extract to result
+  int index = 0;
+  for (int k = 0; k < no_buckets; k++) {
+    for (int i = 0; i < N; i++) {
+      t1[i] = field->bytesToElement(recBufsBytes[i].data() +
+                                    (k * fieldByteSize));
+    }
+    matrix_vand_transpose.MatrixMult(t1, r1, N - T);
+    // copy the resulting vector to the array of randoms
+    for (int i = 0; i < N - T; i++) {
+      randomElementsToFill[index++] = r1[i];
     }
   }
 }
 
-// template <class FieldType>
-// void ProtocolParty<FieldType>::generateRandomShares(
-//     int numOfRandoms, vector<FieldType> &randomElementsToFill) {
-//   // -- allocate communication buffers
-//   vector<FieldType> x1(N), y1(N), t1(N), r1(N);
-//   // every round N-T random shares are generated.
-//   int fieldByteSize = field->getElementSizeInBytes();
-//   int no_buckets = (numOfRandoms / (N - T)) + 1;
-//   randomElementsToFill.resize(no_buckets * (N - T));
-//   // N vectors of no_buckets size
-//   vector<vector<FieldType>> sendBufsElements(N);
-//   // N vectors of no_buckets elements in bytes
-//   vector<vector<byte>> sendBufsBytes(N);
-//   vector<vector<byte>> recBufsBytes(N);
-//   for (int i = 0; i < N; i++) {
-//     sendBufsElements[i].resize(no_buckets);
-//     sendBufsBytes[i].resize(no_buckets * fieldByteSize);
-//     recBufsBytes[i].resize(no_buckets * fieldByteSize);
-//   }
+template <class FieldType>
+void ProtocolParty<FieldType>::getRandomShares(
+    int numOfRandoms, vector<FieldType> &randomElementsToFill) {
 
-//   // -- generate no_buckets number of random t-sharings
-//   for (int k = 0; k < no_buckets; k++) {
-//     // generate random degree-T polynomial (T+1 ... N positions are zero)
-//     for (int i = 0; i < T + 1; i++) {
-//       x1[i] = field->Random();
-//     }
-//     // evaluate using vandermonde matrix (over alpha)
-//     matrix_vand.MatrixMult(x1, y1, T + 1);
+  randomElementsToFill.assign(randomSharesArray.begin() + randomSharesOffset,
+                              randomSharesArray.begin() + randomSharesOffset +
+                              numOfRandoms);
 
-//     // prepare shares to be sent
-//     for (int i = 0; i < N; i++) {
-//       sendBufsElements[i][k] = y1[i];
-//     }
-//   }
-//   // -- convert random elements to bytes
-//   for (int i = 0; i < N; i++) {
-//     for (int j = 0; j < no_buckets; j++) {
-//       field->elementToBytes(sendBufsBytes[i].data() + j*fieldByteSize,
-//                             sendBufsElements[i][j]);
-//     }
-//   }
-//   // -- exchange elements all-to-all
-//   roundFunctionSync(sendBufsBytes, recBufsBytes, 4); // round 4
-//   // -- convert bytes to random elements and extract to result
-//   int index = 0;
-//   for (int k = 0; k < no_buckets; k++) {
-//     for (int i = 0; i < N; i++) {
-//       t1[i] = field->bytesToElement(recBufsBytes[i].data() +
-//                                     (k * fieldByteSize));
-//     }
-//     matrix_vand_transpose.MatrixMult(t1, r1, N - T);
-//     // copy the resulting vector to the array of randoms
-//     for (int i = 0; i < N - T; i++) {
-//       randomElementsToFill[index++] = r1[i];
-//     }
-//   }
-// }
+  this->randomSharesOffset += numOfRandoms;
+}
 
-// template <class FieldType>
-// void ProtocolParty<FieldType>::getRandomShares(
-//     int numOfRandoms, vector<FieldType> &randomElementsToFill) {
+template <class FieldType>
+void ProtocolParty<FieldType>::getRandomSharesWithCheck(
+    int numOfRandoms, vector<FieldType> &randomElementsToFill) {
 
-//   randomElementsToFill.assign(randomSharesArray.begin() + randomSharesOffset,
-//                               randomSharesArray.begin() + randomSharesOffset +
-//                               numOfRandoms);
+  getRandomShares(numOfRandoms, randomElementsToFill);
 
-//   randomSharesOffset += numOfRandoms;
-// }
+  batchConsistencyCheckOfShares(randomElementsToFill);
+}
 
 template <class FieldType>
 void ProtocolParty<FieldType>::generateRandom2TAndTShares(
@@ -536,6 +598,40 @@ void ProtocolParty<FieldType>::generateRandom2TAndTShares(
       index++;
     }
   }
+
+  // -- check validity of the t-shares
+  // 2t-shares do not have to be checked
+  batchConsistencyCheckOfShares(randomElementsOnlyTshares);  
+}
+
+template <class FieldType>
+void ProtocolParty<FieldType>::batchConsistencyCheckOfShares(
+    const vector<FieldType> &inputShares) { 
+  // first generate the common aes key
+  auto key = generateCommonKey();
+  // calc the number of times we need to run the verification -- ceiling
+  int iterations =
+      (5 + field->getElementSizeInBytes() - 1) / field->getElementSizeInBytes();
+
+  vector<FieldType> randomElements(inputShares.size() * iterations);
+  generatePseudoRandomElements(key, randomElements, inputShares.size());
+
+  for (int j = 0; j < iterations; j++) {
+    vector<FieldType> r(1); // vector holding the random shares generated
+    vector<FieldType> v(1);
+    vector<FieldType> secret(1);
+
+    getRandomShares(1, r);
+
+    for (int i = 0; i < inputShares.size(); i++)
+      v[0] += randomElements[i + j * inputShares.size()] * inputShares[i];
+
+    v[0] += r[0];
+
+    // if all the the parties share lie on the same polynomial this will not
+    // abort
+    openShare(1, v, secret);
+  }
 }
 
 template <class FieldType>
@@ -552,6 +648,17 @@ void ProtocolParty<FieldType>::initializationPhase() {
   for (int i = 0; i < N; i++) {
     this->alpha[i] = field->GetElement(i + 1);
   }
+
+  // Interpolate first d+1 positions of (alpha,x)
+  matrix_for_t.allocate(N - 1 - T, T + 1, field); 
+  // slices, only positions from 0..d
+  matrix_for_t.InitHIMVectorAndsizes(alpha, T + 1, N - T - 1);
+
+  // Interpolate first d+1 positions of (alpha,x)
+  matrix_for_2t.allocate(N - 1 - 2*T, 2*T + 1, field);
+  // slices, only positions from 0..d
+  matrix_for_2t.InitHIMVectorAndsizes(alpha, 2*T + 1, N - 1 - 2*T);
+  
   this->matrix_for_interpolate.allocate(1, N, field);
   this->matrix_for_interpolate.InitHIMByVectors(alpha, beta);
   this->matrix_vand.allocate(N, N, field);
@@ -561,12 +668,105 @@ void ProtocolParty<FieldType>::initializationPhase() {
 }
 
 template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
+  int iterations =
+      (5 + field->getElementSizeInBytes() - 1) / field->getElementSizeInBytes();
+  int keysize = 16 / field->getElementSizeInBytes() + 1;
+  // TODO: this is loose
+  int numOfRandomShares = 6 * keysize + 3 * iterations + 2;
+  this->randomSharesArray.resize(numOfRandomShares);
+
+  // -- generate random shares for the AES key
+  this->randomSharesOffset = 0;
+  generateRandomShares(numOfRandomShares, this->randomSharesArray);
+  
   // -- generate t-shareing and 2t-sharings for DN mult to use
   this->offset = 0;
-  int numDoubleShares =
-    (this->numOfInputGates + this->numOfMultGates + 1); // * iterations; 
+  int numDoubleShares = this->numOfMultGates*2 + 1;
   offlineDNForMultiplication(numDoubleShares);
   return true;
+}
+
+template <class FieldType>
+bool ProtocolParty<FieldType>::checkConsistency(vector<FieldType> &x, int d) {
+  if (d == T) {
+    vector<FieldType> y(N - 1 - d); // the result of multiplication
+    vector<FieldType> x_until_t(T + 1);
+
+    for (int i = 0; i < T + 1; i++) {
+      x_until_t[i] = x[i];
+    }
+
+    matrix_for_t.MatrixMult(x_until_t, y);
+
+    // compare that the result is equal to the according positions in x
+    for (int i = 0; i < N - d - 1; i++)
+    {
+      if ((y[i]) != (x[d + 1 + i])) {
+        return false;
+      }
+    }
+    return true;
+  } else if (d == 2 * T) {
+    vector<FieldType> y(N - 1 - d); // the result of multiplication
+
+    vector<FieldType> x_until_2t(2 * T + 1);
+
+    for (int i = 0; i < 2 * T + 1; i++) {
+      x_until_2t[i] = x[i];
+    }
+
+    matrix_for_2t.MatrixMult(x_until_2t, y);
+
+    // compare that the result is equal to the according positions in x
+    for (int i = 0; i < N - d - 1; i++)
+    {
+      if ((y[i]) != (x[d + 1 + i])) {
+        return false;
+      }
+    }
+    return true;
+
+  } else {
+    vector<FieldType> alpha_until_d(d + 1);
+    vector<FieldType> alpha_from_d(N - 1 - d);
+    vector<FieldType> x_until_d(d + 1);
+    vector<FieldType> y(N - 1 - d); // the result of multiplication
+
+    for (int i = 0; i < d + 1; i++) {
+      alpha_until_d[i] = alpha[i];
+      x_until_d[i] = x[i];
+    }
+    for (int i = d + 1; i < N; i++) {
+      alpha_from_d[i - (d + 1)] = alpha[i];
+    }
+    // Interpolate first d+1 positions of (alpha,x)
+    HIM<FieldType> matrix(N - 1 - d, d + 1,
+                          field); // slices, only positions from 0..d
+    matrix.InitHIMByVectors(alpha_until_d, alpha_from_d);
+    matrix.MatrixMult(x_until_d, y);
+
+    // compare that the result is equal to the according positions in x
+    for (int i = 0; i < N - d - 1; i++)
+    {
+      if (y[i] != x[d + 1 + i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return true;
+}
+
+
+template <class FieldType>
+FieldType ProtocolParty<FieldType>::reconstructShare(vector<FieldType> &x,
+                                                     int d) {
+
+  if (!checkConsistency(x, d)) {
+    cout << "reconstructing " << d << "-share fail." << '\n';
+    abort();
+  } else
+    return interpolate(x);  
 }
 
 // Interpolate polynomial at position Zero
@@ -577,11 +777,6 @@ FieldType ProtocolParty<FieldType>::interpolate(vector<FieldType> &x) {
   return y_for_interpolate[0];
 }
 
-template <class FieldType>
-FieldType ProtocolParty<FieldType>::reconstructShare(vector<FieldType> &x,
-                                                     int d) {
-    return interpolate(x);
-}
 
 template <class FieldType> int ProtocolParty<FieldType>::processNotMult() {
   int count = 0;
@@ -590,39 +785,29 @@ template <class FieldType> int ProtocolParty<FieldType>::processNotMult() {
 
     // add gate
     if (circuit.getGates()[k].gateType == ADD) {
-      gateShareArr[circuit.getGates()[k].output * 2] =
-          gateShareArr[circuit.getGates()[k].input1 * 2] +
-          gateShareArr[circuit.getGates()[k].input2 * 2];
-      gateShareArr[circuit.getGates()[k].output * 2 + 1] =
-          gateShareArr[circuit.getGates()[k].input1 * 2 + 1] +
-          gateShareArr[circuit.getGates()[k].input2 * 2 + 1];
+      gateShareArr[circuit.getGates()[k].output] =
+          gateShareArr[circuit.getGates()[k].input1] +
+          gateShareArr[circuit.getGates()[k].input2];
       count++;
     }
 
     else if (circuit.getGates()[k].gateType == SUB) // sub gate
     {
-      gateShareArr[circuit.getGates()[k].output * 2] =
-          gateShareArr[circuit.getGates()[k].input1 * 2] -
-          gateShareArr[circuit.getGates()[k].input2 * 2];
-      gateShareArr[circuit.getGates()[k].output * 2 + 1] =
-          gateShareArr[circuit.getGates()[k].input1 * 2 + 1] -
-          gateShareArr[circuit.getGates()[k].input2 * 2 + 1];
+      gateShareArr[circuit.getGates()[k].output] =
+          gateShareArr[circuit.getGates()[k].input1] -
+          gateShareArr[circuit.getGates()[k].input2];
       count++;
     } else if (circuit.getGates()[k].gateType == SCALAR) {
       long scalar(circuit.getGates()[k].input2);
       FieldType e = field->GetElement(scalar);
-      gateShareArr[circuit.getGates()[k].output * 2] =
-          gateShareArr[circuit.getGates()[k].input1 * 2] * e;
-      gateShareArr[circuit.getGates()[k].output * 2 + 1] =
-          gateShareArr[circuit.getGates()[k].input1 * 2 + 1] * e;
+      gateShareArr[circuit.getGates()[k].output] =
+          gateShareArr[circuit.getGates()[k].input1] * e;
       count++;
     } else if (circuit.getGates()[k].gateType == SCALAR_ADD) {
       long scalar(circuit.getGates()[k].input2);
       FieldType e = field->GetElement(scalar);
-      gateShareArr[circuit.getGates()[k].output * 2] =
-          gateShareArr[circuit.getGates()[k].input1 * 2] + e;
-      gateShareArr[circuit.getGates()[k].output * 2 + 1] =
-          gateShareArr[circuit.getGates()[k].input1 * 2 + 1] + e;
+      gateShareArr[circuit.getGates()[k].output] =
+          gateShareArr[circuit.getGates()[k].input1] + e;
       count++;
     } // else ignore mult gates
   }
