@@ -10,7 +10,8 @@ INCLUDE_DIRECTORIES($ENV{HOME}/ntl-11.4.1/include $ENV{HOME} $ENV{HOME}/libscapi
 set(SOURCE_FILES main.cpp
         ProtocolParty.cpp ProtocolParty.h ProtocolTimer.cpp ProtocolTimer.h
         ZpKaratsubaElement.cpp ZpKaratsubaElement.h
-        HashEncrypt.cpp HashEncrypt.h HashAbstract.h TemplateField.cpp)
+        HashEncrypt.cpp HashEncrypt.h HashAbstract.h TemplateField.cpp
+        Interpolate.h Interpolate.cpp)
 
 
 link_directories(/usr/ssl/lib/ $ENV{HOME}/libscapi/install/lib )
