@@ -106,6 +106,9 @@ public:
   void verificationPhase();
   void DNHonestMultiplication(FieldType *a, FieldType *b,
                               vector<FieldType> &cToFill, int numOfMult);
+  // compute vector products w/ DN Mult
+  void DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
+                 vector<FieldType>& c, int groupSize);
   void compressVerification(vector<FieldType>& aShares,
                             vector<FieldType>& bShares, FieldType& cShare);
   void outputPhase();
@@ -141,7 +144,7 @@ public:
   bool checkConsistency(vector<FieldType> &x, int d);
   // locally interpolate received sharing
   FieldType reconstructShare(vector<FieldType> &x, int d);
-  FieldType interpolate(vector<FieldType> &x);
+  FieldType interpolate_to_zero(vector<FieldType> &x);
 };
 
 template <class FieldType>
@@ -400,13 +403,14 @@ compressVerification(vector<FieldType>& aShares, vector<FieldType>& bShares,
   // recursive case:
   // -- divide into K groups
   int groupSize = (length + this->K -1 )/ this->K;
-  vector<FieldType> dShares(this->K*2);
+  vector<FieldType> dShares(this->K*2 - 1); // 2k-1 points -> 2k-2 deg
   vector<vector<FieldType>> AShares(groupSize);
   vector<vector<FieldType>> BShares(groupSize);
-  vector<FieldType> alpha_k(this->K * 2);
-  for (int i=0; i<this->K*2; i++) {
+  vector<FieldType> alpha_k(this->K*2 - 1);
+  for (int i=0; i< this->K*2 - 1; i++) {
     alpha_k[i] = field->GetElement(i+1);
   }
+
   // -- interploate groupSize polynomials of degree K
   // interpolate A[i]
   for (int i=0; i<groupSize; i++) {
@@ -415,6 +419,7 @@ compressVerification(vector<FieldType>& aShares, vector<FieldType>& bShares,
       tmp.push_back(aShares[j]);
     }
     interp.interpolate(alpha_k, tmp, AShares[i]);
+    AShares[i].resize(this->K, this->field->GetElement(0));
   }
 
   // interpolate B[i]
@@ -424,13 +429,18 @@ compressVerification(vector<FieldType>& aShares, vector<FieldType>& bShares,
       tmp.push_back(bShares[j]);
     }
     interp.interpolate(alpha_k, tmp, BShares[i]);
+    BShares[i].resize(this->K, this->field->GetElement(0));
   }
 
   // -- one DN mult for each group i to compute di
-  // build dShares
-  for (int i=0; i<this->K - 1; i++) {
+  // build dShares 1 .. k-1
+  for (int i=0; i< this->K - 1; i++) {
+    
     // TODO: start here
   }
+  // build dShares k: c - d_1 - ... - d_{k-1}
+  // build dShares k+1 .. 2k - 1
+
   // -- dot product batch verification
   // -- get new dot product of size n/K
     return;
@@ -907,12 +917,12 @@ FieldType ProtocolParty<FieldType>::reconstructShare(vector<FieldType> &x,
     cout << "reconstructing " << d << "-share fail." << '\n';
     abort();
   } else
-    return interpolate(x);  
+    return interpolate_to_zero(x);  
 }
 
 // Interpolate polynomial at position Zero
 template <class FieldType>
-FieldType ProtocolParty<FieldType>::interpolate(vector<FieldType> &x) {
+FieldType ProtocolParty<FieldType>::interpolate_to_zero(vector<FieldType> &x) {
   // vector<FieldType> y(N); // result of interpolate
   matrix_for_interpolate.MatrixMult(x, y_for_interpolate);
   return y_for_interpolate[0];
@@ -1045,7 +1055,7 @@ int ProtocolParty<FieldType>::processMultDN(int indexInRandomArray) {
       xyMinurAllShares[i] =
           field->bytesToElement(recBufsBytes[i].data() + (k * fieldByteSize));
     }
-    xyMinusR[k] = interpolate(xyMinurAllShares);
+    xyMinusR[k] = interpolate_to_zero(xyMinurAllShares);
     field->elementToBytes(xyMinusRBytes.data() + (k * fieldByteSize),
                           xyMinusR[k]);
   }
@@ -1097,6 +1107,95 @@ int ProtocolParty<FieldType>::processMultDN(int indexInRandomArray) {
 }
 
 template <class FieldType>
+void ProtocolParty<FieldType>::DNMultVec(vector<FieldType>& a,
+                                         vector<FieldType>& b,
+                                         vector<FieldType>& c,
+                                         int groupSize) {
+  // assert( a.size() == b.size() );
+  int totalLength = a.size();
+  int numOfMults = (totalLength + groupSize - 1) / groupSize;
+  int fieldByteSize = field->getElementSizeInBytes();
+  c.resize(numOfMults);
+  vector<FieldType> xyMinusRShares(numOfMults);
+  vector<byte> xyMinusRSharesBytes(numOfMults * fieldByteSize);
+  vector<FieldType> xyMinusR(numOfMults);
+  vector<byte> xyMinusRBytes(numOfMults * fieldByteSize);
+  vector<vector<byte>> recBufsBytes;
+
+  // -- generate the 2t-sharings for xy - r
+  for (int group_i = 0; group_i < numOfMults; group_i++) {
+    int group_end = (group_i + 1) * groupSize > totalLength ?
+      totalLength : (group_i + 1) * groupSize;
+    for (int i = group_i * groupSize; i < group_end; i++) {
+      xyMinusRShares[group_i] += a[i] * b[i];
+    }
+    xyMinusRShares[group_i] -=
+      this->randomTAnd2TShares[this->offset + 2*group_i + 1];
+  }
+
+  for (int group_i = 0; group_i < numOfMults; group_i++) {
+    field->elementToBytes(xyMinusRSharesBytes.data() +
+                          (group_i * fieldByteSize), xyMinusRShares[group_i]);
+  }
+
+  // -- gather from all to p0
+  if (this->m_partyId == 0) {
+    // p0 receive the shares from all the other parties
+    recBufsBytes.resize(N);
+    for (int i = 0; i < N; i++) {
+      recBufsBytes[i].resize(numOfMults * fieldByteSize);
+    }
+    recToP1(xyMinusRSharesBytes, recBufsBytes);
+  } else {
+    // send the shares to p0
+    this->parties[0]->getChannel()->write(xyMinusRSharesBytes.data(),
+                                          xyMinusRSharesBytes.size());
+  }
+
+  // -- p0 reconstruct the shares and send to all
+  if (this->m_partyId == 0) {
+    vector<FieldType> xyMinurAllShares(N);
+
+    for (int group_i = 0; group_i < numOfMults; group_i++) {
+      for (int i = 0; i < N; i++) {
+        xyMinurAllShares[i] =
+            field->bytesToElement(recBufsBytes[i].data() +
+                                  (group_i * fieldByteSize));
+      }
+      // reconstruct the shares by p0
+      xyMinusR[group_i] = interpolate_to_zero(xyMinurAllShares);
+      // convert to bytes
+      field->elementToBytes(xyMinusRBytes.data() + (group_i * fieldByteSize),
+                            xyMinusR[group_i]);
+    }
+
+    // send the reconstructed vector to all the other parties
+    sendFromP1(xyMinusRBytes);
+  } else { 
+    // each party get the xy-r reconstruced vector from p0
+    this->parties[0]->getChannel()->read(xyMinusRBytes.data(),
+                                         xyMinusRBytes.size());
+  }
+
+  // -- other party convert by to element
+  if (this->m_partyId != 0) {
+    for (int group_i = 0; group_i < numOfMults; group_i++) {
+      xyMinusR[group_i] = field->bytesToElement(xyMinusRBytes.data() +
+                                                (group_i * fieldByteSize));
+    }
+  }
+
+  // -- compute xy - r + [r]_t = t-sharing of xy
+  for (int group_i = 0; group_i < numOfMults; group_i++) {
+    c[group_i] =
+      this->randomTAnd2TShares[offset + 2 * group_i] + xyMinusR[group_i];
+  }
+
+  this->offset += numOfMults * 2;
+}
+
+
+template <class FieldType>
 void ProtocolParty<FieldType>::DNHonestMultiplication(
     FieldType *a, FieldType *b, vector<FieldType> &cToFill, int numOfMults) {
 
@@ -1142,7 +1241,7 @@ void ProtocolParty<FieldType>::DNHonestMultiplication(
             field->bytesToElement(recBufsBytes[i].data() + (k * fieldByteSize));
       }
       // reconstruct the shares by p0
-      xyMinusR[k] = interpolate(xyMinurAllShares);
+      xyMinusR[k] = interpolate_to_zero(xyMinurAllShares);
       // convert to bytes
       field->elementToBytes(xyMinusRBytes.data() + (k * fieldByteSize),
                             xyMinusR[k]);
@@ -1266,7 +1365,7 @@ template <class FieldType> void ProtocolParty<FieldType>::outputPhase() {
 
       if (flag_print_output)
         cout << "the result for " << circuit.getGates()[k].input1
-             << " is : " << field->elementToString(interpolate(x1)) << '\n';
+             << " is : " << field->elementToString(interpolate_to_zero(x1)) << '\n';
       counter++;
     }
   }
