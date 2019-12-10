@@ -195,13 +195,13 @@ interpolate(vector<FieldType>& x, // input
             vector<FieldType>& y, // input
             vector<FieldType>& polynomial){
 
-  // assert(y.size() >= x.size());
+  // assert(y.size() <= x.size());
   int nPoints = y.size();
   int degree = nPoints - 1;
   vector<FieldType> result(nPoints, FieldType(0));
 
   // ---- O(n^2) to compute all numerators ----
-  vector< vector<FieldType> > numerator_before_i(nPoints);
+    vector< vector<FieldType> > numerator_before_i(nPoints);
   vector< vector<FieldType> > numerator_skip_i(nPoints);
   // fill-in numerator_before_i from left to right
   numerator_before_i[0] = vector<FieldType>(1, FieldType(1));
@@ -221,7 +221,7 @@ interpolate(vector<FieldType>& x, // input
   for(int i=0; i<nPoints; i++){
     multToPolynomial(numerator_before_i[i], numerator_skip_i[i]);
   }
-  
+
   // ---- O(n^2) to compute all factors ----
   vector<FieldType> factor(nPoints);
   for(int i=0; i<nPoints; i++){
