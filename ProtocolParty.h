@@ -30,6 +30,10 @@
 using namespace std;
 using namespace std::chrono;
 
+// TODO: find tight # of random shares to precompute
+// TODO: debug ``short groups'' during compression
+// TODO: how to pad ``short groups''
+
 template <class FieldType>
 class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 
@@ -39,7 +43,7 @@ private:
   
   // -- global const
   int numThreads = 1;           // TODO: add as main arguments later
-  int _K = 291;                  // the 'batch' size <=> 'shrink' factor
+  int _K = 100;                  // the 'batch' size <=> 'shrink' factor
   
   // -- global variables
   int iteration;                       // current iteration number
@@ -391,21 +395,43 @@ buildPolyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
              vector<vector<FieldType>>& AShares,
              vector<vector<FieldType>>& BShares, vector<FieldType>& CShare) {
 
+  // batchDegree is _K except in the base case
+  int batchDegree = (aShares.size() + groupSize - 1) / groupSize;
   AShares.resize(groupSize);
   BShares.resize(groupSize);
 
-  cout << "before building A, B" << endl;
   // -- interploate groupSize polynomials of degree K
   // interpolate A[i], B[i]
   interpolatePolyVec(aShares, AShares, groupSize);
   interpolatePolyVec(bShares, BShares, groupSize);
+
   // evaluate A(k), ..., A(2k-2), B(k), ..., B(2k-2)
-  cout << "after eval-ing A, B" << endl;
   vector<FieldType> ASharesEval;
   vector<FieldType> BSharesEval;
-  evalPolyVec(AShares, ASharesEval, _K-1, _K);
-  evalPolyVec(BShares, BSharesEval, _K-1, _K);
+  evalPolyVec(AShares, ASharesEval, batchDegree-1, batchDegree);
+  evalPolyVec(BShares, BSharesEval, batchDegree-1, batchDegree);
 
+  // // ---- TODO: delete vvv ----
+  // if (m_partyId == 0) {
+  //   cout << "A is " << endl;
+  //   for (auto p : AShares) {
+  //     for (auto e : p) {
+  //       cout << e << " ";
+  //     }
+  //     cout << endl;
+  //   }
+
+  //   cout << endl << "A Evals are : ";
+  //   for (auto e : aShares) {
+  //     cout << e << " ";
+  //   }
+  //   for (auto e : ASharesEval) {
+  //     cout << e << " ";
+  //   }
+  //   cout << endl;
+  // }
+  // // ---- TODO: delete ^^^ ----
+  
   // -- dot product batch verification
   // build dShares k .. 2k - 2 and interpolate C
   vector<FieldType> dSharesRest;
@@ -478,15 +504,42 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   bShares.insert(bShares.end(), bN.begin(), bN.end());
   vector<FieldType> dShares(2);
   DNMultVec(aShares, bShares, dShares, groupSize);
+
+  // // ---- TODO: delete vvv ----
+  // vector<FieldType> cShares(1);
+  // cShares[0] = cShare;
+  // vector<FieldType> cResult(1);
+  // openShare(1, cShares, cResult);
+  // cout << "c[0] = " << cResult[0] << endl;
+  // // ---- TODO: delete ^^^ ----
+  
   cShare += dShares[1];
 
+  // // ---- TODO: delete vvv ----
+  // vector<FieldType> aResults(groupSize);
+  // vector<FieldType> bResults(groupSize);
+  // vector<FieldType> dResults(2);
+  // openShare(groupSize, aShares, aResults);
+  // openShare(groupSize, bShares, bResults);
+  // openShare(groupSize, dShares, dResults);
+  // for (int i=0; i<groupSize; i++) {
+  //   cout << "a[" << i << "] = " << aResults[i] << "   "
+  //        << "b[" << i << "] = " << bResults[i] << endl;
+  // }
+  // cout << "d[0] = " << dResults[0] << endl;
+  // // ---- TODO: delete ^^^ ----
+    
   // -- build polynomials, and verify by open
   // interpolate A[i], B[i], and C
   vector<vector<FieldType>> AShares;
   vector<vector<FieldType>> BShares;
   vector<FieldType> CShare;
+
+  cout << "before building polys" << endl;
   buildPolyVec(aShares, bShares, cShare, dShares, groupSize,
                AShares, BShares, CShare);
+  cout << "after buliding polys" << endl;
+  
   // eval at random coin
   vector<FieldType> ASecrets(groupSize);
   vector<FieldType> BSecrets(groupSize);
@@ -494,6 +547,9 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   vector<FieldType> CSecret(1, interp.evalPolynomial(lambda, CShare));
   evalPolyVecAt(AShares, ASecrets, lambda);
   evalPolyVecAt(BShares, BSecrets, lambda);
+
+  cout << "C[0] = " << CSecret[0] << endl;
+
   // open and verify
   vector<FieldType> AResults(groupSize);
   openShare(groupSize, ASecrets, AResults);
@@ -501,6 +557,8 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   openShare(groupSize, BSecrets, BResults);
   vector<FieldType> CResult(1);
   openShare(1, CSecret, CResult);
+  cout << "after open C" << endl;
+    
   for (int i = 0; i < groupSize; i++) {
     CResult[0] = CResult[0] - AResults[i] * BResults[i];
   }
@@ -894,7 +952,7 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
   int numOfRandomShares = 6 * keysize + 3 * iterations
     + 2 + nCompressions + _K;
   cout << "generated singles: " << numOfRandomShares << endl;
-  this->randomSharesArray.resize(numOfRandomShares);
+  this->randomSharesArray.resize(numOfRandomShares * 10);
 
   // -- generate random shares for the AES key
   this->randomSharesOffset = 0;
@@ -905,7 +963,7 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
   this->offset = 0;
   int numDoubleShares = this->numOfMultGates*2 + 1 + nCompressions*_K*2;
   cout << "generated doubles: " << numDoubleShares << endl;
-  offlineDNForMultiplication(numDoubleShares);
+  offlineDNForMultiplication(numDoubleShares * 10);
   return true;
 }
 
@@ -1183,6 +1241,7 @@ void ProtocolParty<FieldType>::
 interpolatePolyVec(vector<FieldType>& aShares,
                    vector<vector<FieldType>>& AShares, int groupSize) {
   int totalLength = aShares.size();
+  int polyDegree = (totalLength + groupSize -1) / groupSize;
   vector<FieldType> yShares;
   for (int i = 0; i < groupSize; i++) {    
     yShares.clear();
@@ -1190,7 +1249,7 @@ interpolatePolyVec(vector<FieldType>& aShares,
       yShares.push_back(aShares[j]);
     }
     interp.interpolate(_alpha_k, yShares, AShares[i]);
-    AShares[i].resize(_K, this->field->GetElement(0));
+    AShares[i].resize(polyDegree, this->field->GetElement(0));
   }
 }
 
