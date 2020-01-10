@@ -30,7 +30,6 @@
 using namespace std;
 using namespace std::chrono;
 
-// TODO: debug ``short groups'' during compression
 // TODO: how to pad ``short groups''
 
 template <class FieldType>
@@ -42,7 +41,7 @@ private:
   
   // -- global const
   int numThreads = 1;           // TODO: add as main arguments later
-  int _K = 100;                  // the 'batch' size <=> 'shrink' factor
+  int _K = 249;                  // the 'batch' size <=> 'shrink' factor
   
   // -- global variables
   int iteration;                     // current iteration number
