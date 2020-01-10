@@ -59,7 +59,7 @@ private:
   TemplateField<FieldType> *field; // used to call some field functions
   ProtocolTimer *protocolTimer;
   // N, T - number of parties, malicious
-  int N, T, m_partyId;  
+  int N, T, keySize, verifyIterations, m_partyId;
   string s;                     // string of my_partyId
   string inputsFile, outputFile;
   ArithmeticCircuit circuit;
@@ -79,8 +79,8 @@ private:
   VDMTranspose<FieldType> matrix_vand_transpose;  
 
   // -- filled during offline-preparation phase
-  vector<FieldType> randomSharesArray;  // used as seed for AES PRG
-  vector<FieldType> randomTAnd2TShares; // used for DN mult
+  vector<FieldType> _randomSharesArray;  // used as seed for AES PRG
+  vector<FieldType> _randomTAnd2TShares; // used for DN mult
   vector<FieldType> gateShareArr; // my share of each gate (1 share each)
   vector<FieldType> gateValueArr; // the value for my input and output
   
@@ -193,6 +193,9 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
   this->protocolTimer = new ProtocolTimer(times, outputTimerFileName);
   this->N = stoi(this->getParser().getValueByKey(arguments, "partiesNumber"));
   this->T = (this->N - 1)/ 2;
+  this->keySize = 16 / field->getElementSizeInBytes() + 1;
+  this->verifyIterations =
+    (5 + field->getElementSizeInBytes() - 1) / field->getElementSizeInBytes();
   this->m_partyId = stoi(this->getParser().getValueByKey(arguments, "partyID"));
   this->s = to_string(m_partyId);
   this->inputsFile = this->getParser().getValueByKey(arguments, "inputFile");
@@ -494,16 +497,16 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
           FieldType& cShare){
   
   // -- append random shares vec(a)_N, vec(b)_N, c_N
-  int groupSize = aShares.size();
-  vector<FieldType> aN(groupSize);
-  getRandomSharesWithCheck(groupSize, aN);
-  vector<FieldType> bN(groupSize);
-  getRandomSharesWithCheck(groupSize, bN);
+  int vecSize = aShares.size();
+  vector<FieldType> aN(vecSize);
+  getRandomSharesWithCheck(vecSize, aN);
+  vector<FieldType> bN(vecSize);
+  getRandomSharesWithCheck(vecSize, bN);
 
   aShares.insert(aShares.end(), aN.begin(), aN.end());
   bShares.insert(bShares.end(), bN.begin(), bN.end());
   vector<FieldType> dShares(2);
-  DNMultVec(aShares, bShares, dShares, groupSize);
+  DNMultVec(aShares, bShares, dShares, vecSize);
 
   // // ---- TODO: delete vvv ----
   // vector<FieldType> cShares(1);
@@ -536,13 +539,13 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   vector<FieldType> CShare;
 
   cout << "before building polys" << endl;
-  buildPolyVec(aShares, bShares, cShare, dShares, groupSize,
+  buildPolyVec(aShares, bShares, cShare, dShares, vecSize,
                AShares, BShares, CShare);
   cout << "after buliding polys" << endl;
   
   // eval at random coin
-  vector<FieldType> ASecrets(groupSize);
-  vector<FieldType> BSecrets(groupSize);
+  vector<FieldType> ASecrets(vecSize);
+  vector<FieldType> BSecrets(vecSize);
   FieldType lambda = randomCoin();
   vector<FieldType> CSecret(1, interp.evalPolynomial(lambda, CShare));
   evalPolyVecAt(AShares, ASecrets, lambda);
@@ -551,15 +554,15 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   cout << "C[0] = " << CSecret[0] << endl;
 
   // open and verify
-  vector<FieldType> AResults(groupSize);
-  openShare(groupSize, ASecrets, AResults);
-  vector<FieldType> BResults(groupSize);
-  openShare(groupSize, BSecrets, BResults);
+  vector<FieldType> AResults(vecSize);
+  openShare(vecSize, ASecrets, AResults);
+  vector<FieldType> BResults(vecSize);
+  openShare(vecSize, BSecrets, BResults);
   vector<FieldType> CResult(1);
   openShare(1, CSecret, CResult);
   cout << "after open C" << endl;
     
-  for (int i = 0; i < groupSize; i++) {
+  for (int i = 0; i < vecSize; i++) {
     CResult[0] = CResult[0] - AResults[i] * BResults[i];
   }
   if (CResult[0] != this->field->GetElement(0)) {
@@ -724,8 +727,8 @@ template <class FieldType>
 void ProtocolParty<FieldType>::getRandomShares(
     int numOfRandoms, vector<FieldType> &randomElementsToFill) {
 
-  randomElementsToFill.assign(randomSharesArray.begin() + randomSharesOffset,
-                              randomSharesArray.begin() + randomSharesOffset +
+  randomElementsToFill.assign(_randomSharesArray.begin() + randomSharesOffset,
+                              _randomSharesArray.begin() + randomSharesOffset +
                               numOfRandoms);
 
   this->randomSharesOffset += numOfRandoms;
@@ -744,20 +747,19 @@ template <class FieldType>
 vector<byte> ProtocolParty<FieldType>::generateCommonKey() {
   // -- calc the number of elements needed for 128 bit AES key
   int fieldByteSize = field->getElementSizeInBytes();
-  int numOfRandomShares = 16 / field->getElementSizeInBytes() + 1;
 
   // -- allocate buffer for AES key
-  vector<FieldType> randomSharesArray(numOfRandomShares);
-  vector<FieldType> aesArray(numOfRandomShares);
-  vector<byte> aesKey(numOfRandomShares * fieldByteSize);
+  vector<FieldType> randomSharesArray(keySize);
+  vector<FieldType> aesArray(keySize);
+  vector<byte> aesKey(keySize * fieldByteSize);
 
   // -- generate random shares for the AES key
-  getRandomShares(numOfRandomShares, randomSharesArray);
-  openShare(numOfRandomShares, randomSharesArray, aesArray);
+  getRandomShares(keySize, randomSharesArray);
+  openShare(keySize, randomSharesArray, aesArray);
 
   // -- turn the aes array into bytes to get the common aes key.
-  for (int i = 0; i < numOfRandomShares; i++) {
-    for (int j = 0; j < numOfRandomShares; j++) {
+  for (int i = 0; i < keySize; i++) {
+    for (int j = 0; j < keySize; j++) {
       field->elementToBytes(aesKey.data() + (j * fieldByteSize), aesArray[j]);
     }
   }
@@ -882,13 +884,10 @@ void ProtocolParty<FieldType>::batchConsistencyCheckOfShares(
   // first generate the common aes key
   auto key = generateCommonKey();
   // calc the number of times we need to run the verification -- ceiling
-  int iterations =
-      (5 + field->getElementSizeInBytes() - 1) / field->getElementSizeInBytes();
-
-  vector<FieldType> randomElements(inputShares.size() * iterations);
+  vector<FieldType> randomElements(inputShares.size() * verifyIterations);
   generatePseudoRandomElements(key, randomElements, inputShares.size());
 
-  for (int j = 0; j < iterations; j++) {
+  for (int j = 0; j < verifyIterations; j++) {
     vector<FieldType> r(1); // vector holding the random shares generated
     vector<FieldType> v(1);
     vector<FieldType> secret(1);
@@ -944,20 +943,26 @@ void ProtocolParty<FieldType>::initializationPhase() {
 }
 
 template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
-  int iterations =
-      (5 + field->getElementSizeInBytes() - 1) / field->getElementSizeInBytes();
-  int keysize = 16 / field->getElementSizeInBytes() + 1;
-  // TODO: this is loose
+  // ---- # of random single shares:
+  // 1. Generating AES keys and verification
+  //    [keySize + verifyIterations]
+  //    -- inputVerification() -> 1 time
+  //    -- generateRandom2TAndTShares() -> 1 time
+  //    -- verificationPhase() -> 2 times in base case
+  //    in total: 4 * (keySize + verifyIterations)
+  // 2. Padding vector product verification in base case
+  //    [2 * vecSize] // which is at most _K
+  //    in total: 2 * _K
+  // 3. Random Coins
+  //    [1]
+  //    in total: nCompressions + 2
   int nCompressions = (int)(log(this->numOfMultGates) / log(_K) + 0.5);
-  int numOfRandomShares = 6 * keysize + 3 * iterations
-    + 2 + nCompressions + _K;
-  cout << "generated singles: " << numOfRandomShares << endl;
-  this->randomSharesArray.resize(numOfRandomShares * 10);
-
-  // -- generate random shares for the AES key
+  int numOfRandomShares =
+    4 * (keySize + verifyIterations) + 2 * _K + nCompressions + 2;
+  _randomSharesArray.resize(numOfRandomShares);
   this->randomSharesOffset = 0;
-  // TODO: this is loose
-  generateRandomShares(numOfRandomShares*10, this->randomSharesArray);
+  generateRandomShares(numOfRandomShares, _randomSharesArray);
+  cout << "generated single Shares: " << numOfRandomShares << endl;
   
   // -- generate t-shareing and 2t-sharings for DN mult to use
   this->offset = 0;
@@ -1129,7 +1134,7 @@ int ProtocolParty<FieldType>::processMultDN(int indexInRandomArray) {
       // compute the share of xy-r
       xyMinusRShares[index] =
           gateShareArr[gate.input1] * gateShareArr[gate.input2] -
-          randomTAnd2TShares[2 * indexInRandomArray + 1];
+          _randomTAnd2TShares[2 * indexInRandomArray + 1];
       indexInRandomArray++;
       index++;
     }
@@ -1227,7 +1232,7 @@ int ProtocolParty<FieldType>::processMultDN(int indexInRandomArray) {
 
     if (gate.gateType == MULT) {
       gateShareArr[gate.output] =
-          randomTAnd2TShares[2 * indexInRandomArray] + xyMinusR[index];
+          _randomTAnd2TShares[2 * indexInRandomArray] + xyMinusR[index];
       indexInRandomArray++;
       index++;
     }
@@ -1301,7 +1306,7 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
       xyMinusRShares[group_i] += a[i] * b[i];
     }
     xyMinusRShares[group_i] = xyMinusRShares[group_i] -
-      this->randomTAnd2TShares[this->offset + 2*group_i + 1];
+      _randomTAnd2TShares[this->offset + 2*group_i + 1];
   }
 
   for (int group_i = 0; group_i < numOfMults; group_i++) {
@@ -1359,7 +1364,7 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
   // -- compute xy - r + [r]_t = t-sharing of xy
   for (int group_i = 0; group_i < numOfMults; group_i++) {
     c[group_i] =
-      this->randomTAnd2TShares[offset + 2 * group_i] + xyMinusR[group_i];
+      _randomTAnd2TShares[offset + 2 * group_i] + xyMinusR[group_i];
   }
 
   this->offset += numOfMults * 2;
@@ -1369,7 +1374,7 @@ template <class FieldType>
 void ProtocolParty<FieldType>::
 offlineDNForMultiplication(int numOfDoubleShares) {
   generateRandom2TAndTShares(numOfDoubleShares,
-                             this->randomTAnd2TShares);
+                             _randomTAnd2TShares);
 }
 
 template <class FieldType>
