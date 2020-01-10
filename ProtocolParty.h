@@ -30,7 +30,6 @@
 using namespace std;
 using namespace std::chrono;
 
-// TODO: find tight # of random shares to precompute
 // TODO: debug ``short groups'' during compression
 // TODO: how to pad ``short groups''
 
@@ -46,10 +45,8 @@ private:
   int _K = 100;                  // the 'batch' size <=> 'shrink' factor
   
   // -- global variables
-  int iteration;                       // current iteration number
-  int currentCircuitLayer = 0;         // current circuit layer
-  int offset = 0;                      // next random double share to use
-  int randomSharesOffset = 0;          // next random share to use
+  int iteration;                     // current iteration number
+  int currentCircuitLayer = 0;       // current circuit layer
   vector<FieldType> y_for_interpolate; // size = N
   boost::asio::io_service io_service;
 
@@ -79,8 +76,10 @@ private:
   VDMTranspose<FieldType> matrix_vand_transpose;  
 
   // -- filled during offline-preparation phase
-  vector<FieldType> _randomSharesArray;  // used as seed for AES PRG
-  vector<FieldType> _randomTAnd2TShares; // used for DN mult
+  vector<FieldType> _singleSharesArray;  // used as seed for AES PRG
+  int _singleSharesOffset = 0;       // next random share to use
+  vector<FieldType> _doubleSharesArray; // used for DN mult
+  int _doubleSharesOffset = 0; // next random double share to use
   vector<FieldType> gateShareArr; // my share of each gate (1 share each)
   vector<FieldType> gateValueArr; // the value for my input and output
   
@@ -355,7 +354,7 @@ template <class FieldType> void ProtocolParty<FieldType>::runOnline() {
 
 template <class FieldType>
 void ProtocolParty<FieldType>::computationPhase() {
-  int countNumMult = this->offset / 2;
+  int countNumMult = _doubleSharesOffset / 2;
   int numOfLayers = circuit.getLayers().size();
   for (int i = 0; i < numOfLayers - 1; i++) {
     currentCircuitLayer = i;
@@ -363,7 +362,7 @@ void ProtocolParty<FieldType>::computationPhase() {
     processNotMult();
     countNumMult += processMultiplications(countNumMult);
   }
-  this->offset = countNumMult;
+  _doubleSharesOffset = countNumMult;
 }
 
 template <class FieldType>
@@ -727,11 +726,11 @@ template <class FieldType>
 void ProtocolParty<FieldType>::getRandomShares(
     int numOfRandoms, vector<FieldType> &randomElementsToFill) {
 
-  randomElementsToFill.assign(_randomSharesArray.begin() + randomSharesOffset,
-                              _randomSharesArray.begin() + randomSharesOffset +
+  randomElementsToFill.assign(_singleSharesArray.begin() + _singleSharesOffset,
+                              _singleSharesArray.begin() + _singleSharesOffset +
                               numOfRandoms);
 
-  this->randomSharesOffset += numOfRandoms;
+  _singleSharesOffset += numOfRandoms;
 }
 
 template <class FieldType>
@@ -957,18 +956,22 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
   //    [1]
   //    in total: nCompressions + 2
   int nCompressions = (int)(log(this->numOfMultGates) / log(_K) + 0.5);
-  int numOfRandomShares =
+  int numSingleShares =
     4 * (keySize + verifyIterations) + 2 * _K + nCompressions + 2;
-  _randomSharesArray.resize(numOfRandomShares);
-  this->randomSharesOffset = 0;
-  generateRandomShares(numOfRandomShares, _randomSharesArray);
-  cout << "generated single Shares: " << numOfRandomShares << endl;
+  _singleSharesOffset = 0;
+  generateRandomShares(numSingleShares, _singleSharesArray);
+  cout << "generated single Shares: " << numSingleShares << endl;
   
-  // -- generate t-shareing and 2t-sharings for DN mult to use
-  this->offset = 0;
-  int numDoubleShares = this->numOfMultGates*2 + 1 + nCompressions*_K*2;
+  // ---- # of random double shares:
+  // 1. Compute Mult gates in the circuit
+  //    -- in total: numOfMultGates
+  // 2. Compress Verification
+  //    -- 2 * _K * (nCompressions + 1)
+  int numDoubleShares =
+    this->numOfMultGates + (nCompressions+1)*_K*2;
+  _doubleSharesOffset = 0;
+  offlineDNForMultiplication(numDoubleShares);
   cout << "generated doubles: " << numDoubleShares << endl;
-  offlineDNForMultiplication(numDoubleShares * 10);
   return true;
 }
 
@@ -1134,7 +1137,7 @@ int ProtocolParty<FieldType>::processMultDN(int indexInRandomArray) {
       // compute the share of xy-r
       xyMinusRShares[index] =
           gateShareArr[gate.input1] * gateShareArr[gate.input2] -
-          _randomTAnd2TShares[2 * indexInRandomArray + 1];
+          _doubleSharesArray[2 * indexInRandomArray + 1];
       indexInRandomArray++;
       index++;
     }
@@ -1232,7 +1235,7 @@ int ProtocolParty<FieldType>::processMultDN(int indexInRandomArray) {
 
     if (gate.gateType == MULT) {
       gateShareArr[gate.output] =
-          _randomTAnd2TShares[2 * indexInRandomArray] + xyMinusR[index];
+          _doubleSharesArray[2 * indexInRandomArray] + xyMinusR[index];
       indexInRandomArray++;
       index++;
     }
@@ -1306,7 +1309,7 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
       xyMinusRShares[group_i] += a[i] * b[i];
     }
     xyMinusRShares[group_i] = xyMinusRShares[group_i] -
-      _randomTAnd2TShares[this->offset + 2*group_i + 1];
+      _doubleSharesArray[_doubleSharesOffset + 2*group_i + 1];
   }
 
   for (int group_i = 0; group_i < numOfMults; group_i++) {
@@ -1364,17 +1367,17 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
   // -- compute xy - r + [r]_t = t-sharing of xy
   for (int group_i = 0; group_i < numOfMults; group_i++) {
     c[group_i] =
-      _randomTAnd2TShares[offset + 2 * group_i] + xyMinusR[group_i];
+      _doubleSharesArray[_doubleSharesOffset + 2*group_i] + xyMinusR[group_i];
   }
 
-  this->offset += numOfMults * 2;
+  _doubleSharesOffset += numOfMults * 2;
 }
 
 template <class FieldType>
 void ProtocolParty<FieldType>::
 offlineDNForMultiplication(int numOfDoubleShares) {
   generateRandom2TAndTShares(numOfDoubleShares,
-                             _randomTAnd2TShares);
+                             _doubleSharesArray);
 }
 
 template <class FieldType>
