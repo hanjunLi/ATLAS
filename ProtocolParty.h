@@ -40,12 +40,12 @@ private:
   Interpolate<FieldType> interp; // evaluate (O(n)), interpolate polynomials (O(n^2))
   
   // -- global const
-  int numThreads = 1;           // TODO: add as main arguments later
-  int _K = 249;                  // the 'batch' size <=> 'shrink' factor
+  int numThreads = 1;          // TODO: add as main arguments later
+  int _K = 10;                 // the 'batch' size <=> 'shrink' factor
   
   // -- global variables
-  int iteration;                     // current iteration number
-  int currentCircuitLayer = 0;       // current circuit layer
+  int iteration;                       // current iteration number
+  int currentCircuitLayer = 0;         // current circuit layer
   vector<FieldType> y_for_interpolate; // size = N
   boost::asio::io_service io_service;
 
@@ -65,12 +65,14 @@ private:
   vector<shared_ptr<ProtocolPartyData>> parties;
 
   // -- set in initialization phase
-  vector<FieldType> beta;     // a single zero element
-  vector<FieldType> alpha;    // N distinct non-zero field elements
-  vector<FieldType> _alpha_k;  // 2K-1 distinct non-zero field elements
+  vector<FieldType> beta;      // a single zero element
+  vector<FieldType> alpha;     // N distinct non-zero field elements
+  vector<FieldType> _alpha_k;  // K distinct non-zero field elements
+  vector<FieldType> _alpha_2k; // 2K-1 distinct non-zero field elements
   HIM<FieldType> matrix_for_interpolate;
-  HIM<FieldType> matrix_for_t;
-  HIM<FieldType> matrix_for_2t;  
+  HIM<FieldType> matrix_for_t;  // interpolate first t+1 points to rest N-t-1
+  HIM<FieldType> matrix_for_2t; // interpolate first 2t+1 tpoints to rest N-2t-1
+  HIM<FieldType> matrix_for_k;  // interpolate first k points to rest 2k-1 - k
   VDM<FieldType> matrix_vand;
   VDMTranspose<FieldType> matrix_vand_transpose;  
 
@@ -121,6 +123,8 @@ public:
                     vector<vector<FieldType>>& AShares,
                     vector<vector<FieldType>>& BShares,
                     vector<FieldType>& CShare);
+  void buildPolyVecInd(vector<FieldType>& aShares, vector<FieldType>& bShares,
+                       vector<FieldType>& dShares, int groupSize);
   void compressVerifyVec(vector<FieldType>& aShares,
                          vector<FieldType>& bShares, FieldType& cShare);
   void verifyVec(vector<FieldType>& aShares,
@@ -401,7 +405,7 @@ buildPolyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   AShares.resize(groupSize);
   BShares.resize(groupSize);
 
-  // -- interploate groupSize polynomials of degree K
+  // -- interploate groupSize polynomials of degree K-1
   // interpolate A[i], B[i]
   interpolatePolyVec(aShares, AShares, groupSize);
   interpolatePolyVec(bShares, BShares, groupSize);
@@ -438,7 +442,58 @@ buildPolyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   vector<FieldType> dSharesRest;
   DNMultVec(ASharesEval, BSharesEval, dSharesRest, groupSize);
   dShares.insert(dShares.end(), dSharesRest.begin(), dSharesRest.end());
-  interp.interpolate(_alpha_k, dShares, CShare);
+  interp.interpolate(_alpha_2k, dShares, CShare);
+}
+
+// TODO: assuming no short groups for now!
+template <class FieldType>
+void ProtocolParty<FieldType>::
+buildPolyVecInd(vector<FieldType>& aShares, vector<FieldType>& bShares,
+                vector<FieldType>& dShares, int groupSize) {
+
+  // batchDegree is _K except in the base case
+  int batchDegree = (aShares.size() + groupSize - 1) / groupSize;
+  int totalLength = aShares.size();
+  
+  // interpolate A[i], B[i] and evaluate at A(k), ..., A(2k-2), B(k), ..., B(2k-2)
+  vector< vector<FieldType> > ASharesEval(groupSize);
+  vector< vector<FieldType> > BSharesEval(groupSize);
+  vector<FieldType> ySharesA;   // tmp vector
+  vector<FieldType> ySharesB;   // tmp vector
+  // TODO: refactor
+  for (int i=0; i<groupSize; i++) {
+    ySharesA.clear();
+    ySharesB.clear();
+    for (int j=i; j<totalLength; j+=groupSize) {
+      ySharesA.push_back(aShares[j]);
+      ySharesB.push_back(bShares[j]);
+    }
+    matrix_for_k.MatrixMult(ySharesA, ASharesEval[i]);
+    matrix_for_k.MatrixMult(ySharesB, BSharesEval[i]);
+  }
+
+  cout << "first" << endl;
+  
+  // vector-mult to get the rest of dShares
+  vector<FieldType> ASharesEvalFlat(groupSize * (_K - 1));
+  vector<FieldType> BSharesEvalFlat(groupSize * (_K - 1));
+  for (int i=0; i<_K-1; i++) {
+    // point i
+    for (int j=0; j<groupSize; j++) {
+      // poly j
+      ASharesEvalFlat[i * groupSize + j] = ASharesEval[j][i];
+      BSharesEvalFlat[i * groupSize + j] = BSharesEval[j][i];
+    }
+  }
+
+  cout << "second" << endl;
+  
+  vector<FieldType> dSharesRest;
+  DNMultVec(ASharesEvalFlat, BSharesEvalFlat, dSharesRest, groupSize);
+
+  cout << "third" << endl;
+  // append to passed-in dShares
+  dShares.insert(dShares.end(), dSharesRest.begin(), dSharesRest.end());
 }
 
 // -- keep compressing the dot product to be verified until
@@ -455,6 +510,7 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   } // else : recursive case:
   // -- divide into K groups
   int groupSize = (totalLength + _K -1 )/ _K;
+  
   vector<vector<FieldType>> AShares;
   vector<vector<FieldType>> BShares;
   vector<FieldType> CShare;
@@ -471,6 +527,46 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   for (int i = 0; i< _K - 1; i++) {
     dShares[_K-1] = dShares[_K-1] - dShares[i];
   }
+
+  if (totalLength == groupSize * _K) {
+    cout << "entering new function!" << endl;
+    // no short group, try linear interpolation
+    buildPolyVecInd(aShares, bShares, dShares, groupSize);
+    
+    vector<FieldType> aSharesNew(groupSize);
+    vector<FieldType> bSharesNew(groupSize);
+    FieldType lambda = randomCoin();
+
+    HIM<FieldType> matrix_for_k_lambda;
+    HIM<FieldType> matrix_for_2k_lambda;
+    vector<FieldType> beta_lambda(1);
+    beta_lambda[0] = lambda;
+    matrix_for_k_lambda.allocate(1, _K, field);
+    matrix_for_k_lambda.InitHIMByVectors(_alpha_k, beta_lambda);
+    matrix_for_2k_lambda.allocate(1, 2*_K-1, field);
+    matrix_for_2k_lambda.InitHIMByVectors(_alpha_2k, beta_lambda);
+
+    // TODO: refactor
+    vector<FieldType> ySharesA;   // tmp vector
+    vector<FieldType> ySharesB;   // tmp vector
+    for (int i=0; i<groupSize; i++) {
+      ySharesA.clear();
+      ySharesB.clear();
+      for (int j=i; j<totalLength; j+=groupSize) {
+        ySharesA.push_back(aShares[j]);
+        ySharesB.push_back(bShares[j]);
+      }      
+      matrix_for_k_lambda.MatrixMult(ySharesA, y_for_interpolate);
+      aSharesNew[i] = y_for_interpolate[0];
+      matrix_for_k_lambda.MatrixMult(ySharesB, y_for_interpolate);
+      bSharesNew[i] = y_for_interpolate[0];
+    }
+
+    matrix_for_2k_lambda.MatrixMult(dShares, y_for_interpolate);
+    FieldType cShareNew = y_for_interpolate[0];
+    compressVerifyVec(aSharesNew, bSharesNew, cShareNew);
+    return;
+  } // else, use prvious implementation
 
   // -- interpolate A[i], B[i], and C
   cout << "before building polys" << endl;
@@ -916,21 +1012,26 @@ void ProtocolParty<FieldType>::initializationPhase() {
   for (int i = 0; i < N; i++) {
     this->alpha[i] = field->GetElement(i + 1);
   }
-  _alpha_k.resize(_K*2 - 1);
+  _alpha_2k.resize(_K*2 - 1);
   for (int i=0; i< _K*2 - 1; i++) {
+    _alpha_2k[i] = field->GetElement(i+1);
+  }
+  _alpha_k.resize(_K);
+  for (int i=0; i< _K; i++) {
     _alpha_k[i] = field->GetElement(i+1);
   }
 
-
-  // Interpolate first d+1 positions of (alpha,x)
-  matrix_for_t.allocate(N - 1 - T, T + 1, field); 
-  // slices, only positions from 0..d
+  // Interpolate first T+1 positions (deg = T)
+  matrix_for_t.allocate(N - (1+T), T + 1, field); 
   matrix_for_t.InitHIMVectorAndsizes(alpha, T + 1, N - T - 1);
 
-  // Interpolate first d+1 positions of (alpha,x)
-  matrix_for_2t.allocate(N - 1 - 2*T, 2*T + 1, field);
-  // slices, only positions from 0..d
+  // Interpolate first 2T+1 positions (deg = 2T)
+  matrix_for_2t.allocate(N - (1+2*T), 2*T + 1, field);
   matrix_for_2t.InitHIMVectorAndsizes(alpha, 2*T + 1, N - 1 - 2*T);
+
+  // Interpolate first K positions (deg = K-1)
+  matrix_for_k.allocate(2*_K+1 - _K, _K, field);
+  matrix_for_k.InitHIMVectorAndsizes(_alpha_2k, _K, 2*_K+1 - _K);
   
   this->matrix_for_interpolate.allocate(1, N, field);
   this->matrix_for_interpolate.InitHIMByVectors(alpha, beta);
@@ -1255,7 +1356,7 @@ interpolatePolyVec(vector<FieldType>& aShares,
     for (int j = i; j < totalLength; j += groupSize) {
       yShares.push_back(aShares[j]);
     }
-    interp.interpolate(_alpha_k, yShares, AShares[i]);
+    interp.interpolate(_alpha_2k, yShares, AShares[i]);
     AShares[i].resize(polyDegree, this->field->GetElement(0));
   }
 }
@@ -1280,7 +1381,7 @@ evalPolyVec(vector<vector<FieldType>>& AShares,
   for (int i = 0; i < nPoints; i++) {
     for (int j = 0; j < groupSize; j++) {
       aShares[i*groupSize + j] =
-        interp.evalPolynomial(_alpha_k[i+offset], AShares[j]);
+        interp.evalPolynomial(_alpha_2k[i+offset], AShares[j]);
     }
   }
 }
