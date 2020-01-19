@@ -456,8 +456,8 @@ buildPolyVecInd(vector<FieldType>& aShares, vector<FieldType>& bShares,
   int totalLength = aShares.size();
   
   // interpolate A[i], B[i] and evaluate at A(k), ..., A(2k-2), B(k), ..., B(2k-2)
-  vector< vector<FieldType> > ASharesEval(groupSize);
-  vector< vector<FieldType> > BSharesEval(groupSize);
+  vector< vector<FieldType> > ASharesEval(groupSize, vector<FieldType>(_K-1));
+  vector< vector<FieldType> > BSharesEval(groupSize, vector<FieldType>(_K-1));
   vector<FieldType> ySharesA;   // tmp vector
   vector<FieldType> ySharesB;   // tmp vector
   // TODO: refactor
@@ -1030,8 +1030,8 @@ void ProtocolParty<FieldType>::initializationPhase() {
   matrix_for_2t.InitHIMVectorAndsizes(alpha, 2*T + 1, N - 1 - 2*T);
 
   // Interpolate first K positions (deg = K-1)
-  matrix_for_k.allocate(2*_K+1 - _K, _K, field);
-  matrix_for_k.InitHIMVectorAndsizes(_alpha_2k, _K, 2*_K+1 - _K);
+  matrix_for_k.allocate(2*_K-1 - _K, _K, field);
+  matrix_for_k.InitHIMVectorAndsizes(_alpha_2k, _K, 2*_K-1 - _K);
   
   this->matrix_for_interpolate.allocate(1, N, field);
   this->matrix_for_interpolate.InitHIMByVectors(alpha, beta);
