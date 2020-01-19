@@ -31,6 +31,8 @@ using namespace std;
 using namespace std::chrono;
 
 // TODO: how to pad ``short groups''
+// TODO: refactor
+// TODO: spread reconstruct loads
 
 template <class FieldType>
 class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
