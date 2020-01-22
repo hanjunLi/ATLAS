@@ -43,7 +43,7 @@ private:
   
   // -- global const
   int numThreads = 1;          // TODO: add as main arguments later
-  int _K = 10;                 // the 'batch' size <=> 'shrink' factor
+  int _K = 4;                 // the 'batch' size <=> 'shrink' factor
   
   // -- global variables
   int iteration;                       // current iteration number
@@ -474,8 +474,6 @@ buildPolyVecInd(vector<FieldType>& aShares, vector<FieldType>& bShares,
     matrix_for_k.MatrixMult(ySharesB, BSharesEval[i]);
   }
 
-  cout << "first" << endl;
-  
   // vector-mult to get the rest of dShares
   vector<FieldType> ASharesEvalFlat(groupSize * (_K - 1));
   vector<FieldType> BSharesEvalFlat(groupSize * (_K - 1));
@@ -488,12 +486,9 @@ buildPolyVecInd(vector<FieldType>& aShares, vector<FieldType>& bShares,
     }
   }
 
-  cout << "second" << endl;
-  
   vector<FieldType> dSharesRest;
   DNMultVec(ASharesEvalFlat, BSharesEvalFlat, dSharesRest, groupSize);
 
-  cout << "third" << endl;
   // append to passed-in dShares
   dShares.insert(dShares.end(), dSharesRest.begin(), dSharesRest.end());
 }
@@ -530,10 +525,15 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
     dShares[_K-1] = dShares[_K-1] - dShares[i];
   }
 
-  if (totalLength == groupSize * _K) {
+  aShares.resize( groupSize * _K, field->GetElement(0) );
+  bShares.resize( groupSize * _K, field->GetElement(0) );
+  
+  // if (totalLength == groupSize * _K) {
     cout << "entering new function!" << endl;
     // no short group, try linear interpolation
+    cout << "----before building polys Ind" << endl;
     buildPolyVecInd(aShares, bShares, dShares, groupSize);
+    cout << "----after building polys Ind" << endl;
     
     vector<FieldType> aSharesNew(groupSize);
     vector<FieldType> bSharesNew(groupSize);
@@ -568,23 +568,25 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
     FieldType cShareNew = y_for_interpolate[0];
     compressVerifyVec(aSharesNew, bSharesNew, cShareNew);
     return;
-  } // else, use prvious implementation
+  // } // else, use prvious implementation
 
-  // -- interpolate A[i], B[i], and C
-  cout << "before building polys" << endl;
-  buildPolyVec(aShares, bShares, cShare, dShares, groupSize,
-               AShares, BShares, CShare);
-  cout << "after buliding polys" << endl;
+  // cout << "entering old function!" << endl;
+
+  // // -- interpolate A[i], B[i], and C
+  // cout << "----before building polys" << endl;
+  // buildPolyVec(aShares, bShares, cShare, dShares, groupSize,
+  //              AShares, BShares, CShare);
+  // cout << "----after buliding polys" << endl;
     
-  // -- get new dot product of size n/K
-  vector<FieldType> aSharesNew(groupSize);
-  vector<FieldType> bSharesNew(groupSize);
-  FieldType lambda = randomCoin();
-  FieldType cShareNew = interp.evalPolynomial(lambda, CShare);
-  evalPolyVecAt(AShares, aSharesNew, lambda);
-  evalPolyVecAt(BShares, bSharesNew, lambda);
-  compressVerifyVec(aSharesNew, bSharesNew, cShareNew);
-  return;
+  // // -- get new dot product of size n/K
+  // vector<FieldType> aSharesNew(groupSize);
+  // vector<FieldType> bSharesNew(groupSize);
+  // FieldType lambda = randomCoin();
+  // FieldType cShareNew = interp.evalPolynomial(lambda, CShare);
+  // evalPolyVecAt(AShares, aSharesNew, lambda);
+  // evalPolyVecAt(BShares, bSharesNew, lambda);
+  // compressVerifyVec(aSharesNew, bSharesNew, cShareNew);
+  // return;
 }
 
 template <class FieldType>
@@ -593,7 +595,7 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
           FieldType& cShare){
   
   // -- append random shares vec(a)_N, vec(b)_N, c_N
-  int vecSize = aShares.size();
+    int vecSize = aShares.size();
   vector<FieldType> aN(vecSize);
   getRandomSharesWithCheck(vecSize, aN);
   vector<FieldType> bN(vecSize);
