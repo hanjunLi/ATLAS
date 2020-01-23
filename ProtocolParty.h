@@ -24,13 +24,11 @@
 #include <cmath>
 
 #define flag_print false
-#define flag_print_timings true
 #define flag_print_output true
 
 using namespace std;
 using namespace std::chrono;
 
-// TODO: how to pad ``short groups''
 // TODO: refactor
 // TODO: spread reconstruct loads
 
@@ -42,8 +40,8 @@ private:
   Interpolate<FieldType> interp; // evaluate (O(n)), interpolate polynomials (O(n^2))
   
   // -- global const
-  int numThreads = 1;          // TODO: add as main arguments later
-  int _K = 4;                 // the 'batch' size <=> 'shrink' factor
+  int numThreads = 1;      // TODO: add as main arguments later
+  int _K = 4;              // interpolation degree <=> 'shrink' factor
   
   // -- global variables
   int iteration;                       // current iteration number
@@ -79,10 +77,10 @@ private:
   VDMTranspose<FieldType> matrix_vand_transpose;  
 
   // -- filled during offline-preparation phase
-  vector<FieldType> _singleSharesArray;  // used as seed for AES PRG
-  int _singleSharesOffset = 0;       // next random share to use
+  vector<FieldType> _singleSharesArray; // used as seed for AES PRG
+  int _singleSharesOffset = 0;          // next random share to use
   vector<FieldType> _doubleSharesArray; // used for DN mult
-  int _doubleSharesOffset = 0; // next random double share to use
+  int _doubleSharesOffset = 0;    // next random double share to use
   vector<FieldType> gateShareArr; // my share of each gate (1 share each)
   vector<FieldType> gateValueArr; // the value for my input and output
   
@@ -232,14 +230,7 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
   }
 
   // -- initialize phase
-  auto t1 = high_resolution_clock::now();
   initializationPhase();
-  auto t2 = high_resolution_clock::now();
-
-  auto duration = duration_cast<milliseconds>(t2 - t1).count();
-  if (flag_print_timings) {
-    cout << "time in milliseconds initializationPhase: " << duration << endl;
-  }
 }
 
 template <class FieldType> void ProtocolParty<FieldType>::readMyInputs() {
@@ -277,7 +268,6 @@ template <class FieldType> void ProtocolParty<FieldType>::run() {
 
     auto duration = duration_cast<milliseconds>(t2end - t1start).count();
     protocolTimer->totalTimeArr[iteration] = duration;
-    cout << "time in milliseconds for protocol: " << duration << endl;
   }
 }
 
@@ -298,9 +288,6 @@ template <class FieldType> void ProtocolParty<FieldType>::runOffline() {
   auto t2 = high_resolution_clock::now();
 
   auto duration = duration_cast<milliseconds>(t2 - t1).count();
-  if (flag_print_timings) {
-    cout << "time in milliseconds preparationPhase: " << duration << endl;
-  }
   protocolTimer->preparationPhaseArr[iteration] = duration;
 }
 
@@ -314,9 +301,6 @@ template <class FieldType> void ProtocolParty<FieldType>::runOnline() {
 
   auto duration = duration_cast<milliseconds>(t2 - t1).count();
   protocolTimer->inputPreparationArr[iteration] = duration;
-  if (flag_print_timings) {
-    cout << "time in milliseconds inputPhase: " << duration << endl;
-  }
 
   t1 = high_resolution_clock::now();
   timer->startSubTask("ComputePhase", iteration);
@@ -327,10 +311,6 @@ template <class FieldType> void ProtocolParty<FieldType>::runOnline() {
   duration = duration_cast<milliseconds>(t2 - t1).count();
   protocolTimer->computationPhaseArr[iteration] = duration;
 
-  if (flag_print_timings) {
-    cout << "time in milliseconds computationPhase: " << duration << endl;
-  }
-
   t1 = high_resolution_clock::now();
   timer->startSubTask("VerificationPhase", iteration);
   verificationPhase();
@@ -338,10 +318,6 @@ template <class FieldType> void ProtocolParty<FieldType>::runOnline() {
   t2 = high_resolution_clock::now();
   duration = duration_cast<milliseconds>(t2 - t1).count();
   protocolTimer->verificationPhaseArr[iteration] = duration;
-
-  if (flag_print_timings) {
-    cout << "time in milliseconds verificationPhase: " << duration << endl;
-  }
 
   t1 = high_resolution_clock::now();
   timer->startSubTask("outputPhase", iteration);
@@ -351,10 +327,6 @@ template <class FieldType> void ProtocolParty<FieldType>::runOnline() {
 
   duration = duration_cast<milliseconds>(t2 - t1).count();
   protocolTimer->outputPhaseArr[iteration] = duration;
-
-  if (flag_print_timings) {
-    cout << "time in milliseconds outputPhase: " << duration << endl;
-  }
 }
 
 template <class FieldType>
@@ -418,27 +390,6 @@ buildPolyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   evalPolyVec(AShares, ASharesEval, batchDegree-1, batchDegree);
   evalPolyVec(BShares, BSharesEval, batchDegree-1, batchDegree);
 
-  // // ---- TODO: delete vvv ----
-  // if (m_partyId == 0) {
-  //   cout << "A is " << endl;
-  //   for (auto p : AShares) {
-  //     for (auto e : p) {
-  //       cout << e << " ";
-  //     }
-  //     cout << endl;
-  //   }
-
-  //   cout << endl << "A Evals are : ";
-  //   for (auto e : aShares) {
-  //     cout << e << " ";
-  //   }
-  //   for (auto e : ASharesEval) {
-  //     cout << e << " ";
-  //   }
-  //   cout << endl;
-  // }
-  // // ---- TODO: delete ^^^ ----
-  
   // -- dot product batch verification
   // build dShares k .. 2k - 2 and interpolate C
   vector<FieldType> dSharesRest;
@@ -447,7 +398,6 @@ buildPolyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   interp.interpolate(_alpha_2k, dShares, CShare);
 }
 
-// TODO: assuming no short groups for now!
 template <class FieldType>
 void ProtocolParty<FieldType>::
 buildPolyVecInd(vector<FieldType>& aShares, vector<FieldType>& bShares,
@@ -512,8 +462,7 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   vector<vector<FieldType>> BShares;
   vector<FieldType> CShare;
 
-  cout << "cur len: " << totalLength << endl;
-  cout << "cur groupSize: " << groupSize << endl;
+  cout << "---- cur groupSize: " << groupSize << endl;
 
   // -- one DN mult for each group i to compute   
   // build dShares 0 .. k-2
@@ -528,74 +477,51 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   aShares.resize( groupSize * _K, field->GetElement(0) );
   bShares.resize( groupSize * _K, field->GetElement(0) );
   
-  // if (totalLength == groupSize * _K) {
-    cout << "entering new function!" << endl;
-    // no short group, try linear interpolation
-    cout << "----before building polys Ind" << endl;
-    buildPolyVecInd(aShares, bShares, dShares, groupSize);
-    cout << "----after building polys Ind" << endl;
-    
-    vector<FieldType> aSharesNew(groupSize);
-    vector<FieldType> bSharesNew(groupSize);
-    FieldType lambda = randomCoin();
+  buildPolyVecInd(aShares, bShares, dShares, groupSize);
+  vector<FieldType> aSharesNew(groupSize);
+  vector<FieldType> bSharesNew(groupSize);
+  FieldType lambda = randomCoin();
 
-    HIM<FieldType> matrix_for_k_lambda;
-    HIM<FieldType> matrix_for_2k_lambda;
-    vector<FieldType> beta_lambda(1);
-    beta_lambda[0] = lambda;
-    matrix_for_k_lambda.allocate(1, _K, field);
-    matrix_for_k_lambda.InitHIMByVectors(_alpha_k, beta_lambda);
-    matrix_for_2k_lambda.allocate(1, 2*_K-1, field);
-    matrix_for_2k_lambda.InitHIMByVectors(_alpha_2k, beta_lambda);
+  HIM<FieldType> matrix_for_k_lambda;
+  HIM<FieldType> matrix_for_2k_lambda;
+  vector<FieldType> beta_lambda(1);
+  beta_lambda[0] = lambda;
+  matrix_for_k_lambda.allocate(1, _K, field);
+  matrix_for_k_lambda.InitHIMByVectors(_alpha_k, beta_lambda);
+  matrix_for_2k_lambda.allocate(1, 2*_K-1, field);
+  matrix_for_2k_lambda.InitHIMByVectors(_alpha_2k, beta_lambda);
 
-    // TODO: refactor
-    vector<FieldType> ySharesA;   // tmp vector
-    vector<FieldType> ySharesB;   // tmp vector
-    for (int i=0; i<groupSize; i++) {
-      ySharesA.clear();
-      ySharesB.clear();
-      for (int j=i; j<totalLength; j+=groupSize) {
-        ySharesA.push_back(aShares[j]);
-        ySharesB.push_back(bShares[j]);
-      }      
-      matrix_for_k_lambda.MatrixMult(ySharesA, y_for_interpolate);
-      aSharesNew[i] = y_for_interpolate[0];
-      matrix_for_k_lambda.MatrixMult(ySharesB, y_for_interpolate);
-      bSharesNew[i] = y_for_interpolate[0];
-    }
+  // TODO: refactor
+  vector<FieldType> ySharesA;   // tmp vector
+  vector<FieldType> ySharesB;   // tmp vector
+  for (int i=0; i<groupSize; i++) {
+    ySharesA.clear();
+    ySharesB.clear();
+    for (int j=i; j<totalLength; j+=groupSize) {
+      ySharesA.push_back(aShares[j]);
+      ySharesB.push_back(bShares[j]);
+    }      
+    matrix_for_k_lambda.MatrixMult(ySharesA, y_for_interpolate);
+    aSharesNew[i] = y_for_interpolate[0];
+    matrix_for_k_lambda.MatrixMult(ySharesB, y_for_interpolate);
+    bSharesNew[i] = y_for_interpolate[0];
+  }
 
-    matrix_for_2k_lambda.MatrixMult(dShares, y_for_interpolate);
-    FieldType cShareNew = y_for_interpolate[0];
-    compressVerifyVec(aSharesNew, bSharesNew, cShareNew);
-    return;
-  // } // else, use prvious implementation
-
-  // cout << "entering old function!" << endl;
-
-  // // -- interpolate A[i], B[i], and C
-  // cout << "----before building polys" << endl;
-  // buildPolyVec(aShares, bShares, cShare, dShares, groupSize,
-  //              AShares, BShares, CShare);
-  // cout << "----after buliding polys" << endl;
-    
-  // // -- get new dot product of size n/K
-  // vector<FieldType> aSharesNew(groupSize);
-  // vector<FieldType> bSharesNew(groupSize);
-  // FieldType lambda = randomCoin();
-  // FieldType cShareNew = interp.evalPolynomial(lambda, CShare);
-  // evalPolyVecAt(AShares, aSharesNew, lambda);
-  // evalPolyVecAt(BShares, bSharesNew, lambda);
-  // compressVerifyVec(aSharesNew, bSharesNew, cShareNew);
-  // return;
+  matrix_for_2k_lambda.MatrixMult(dShares, y_for_interpolate);
+  FieldType cShareNew = y_for_interpolate[0];
+  compressVerifyVec(aSharesNew, bSharesNew, cShareNew);
+  return;
 }
 
 template <class FieldType>
 void ProtocolParty<FieldType>::
 verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
           FieldType& cShare){
-  
+
+  auto start_time = high_resolution_clock::now();
+
   // -- append random shares vec(a)_N, vec(b)_N, c_N
-    int vecSize = aShares.size();
+  int vecSize = aShares.size();
   vector<FieldType> aN(vecSize);
   getRandomSharesWithCheck(vecSize, aN);
   vector<FieldType> bN(vecSize);
@@ -606,40 +532,15 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   vector<FieldType> dShares(2);
   DNMultVec(aShares, bShares, dShares, vecSize);
 
-  // // ---- TODO: delete vvv ----
-  // vector<FieldType> cShares(1);
-  // cShares[0] = cShare;
-  // vector<FieldType> cResult(1);
-  // openShare(1, cShares, cResult);
-  // cout << "c[0] = " << cResult[0] << endl;
-  // // ---- TODO: delete ^^^ ----
-  
   cShare += dShares[1];
 
-  // // ---- TODO: delete vvv ----
-  // vector<FieldType> aResults(groupSize);
-  // vector<FieldType> bResults(groupSize);
-  // vector<FieldType> dResults(2);
-  // openShare(groupSize, aShares, aResults);
-  // openShare(groupSize, bShares, bResults);
-  // openShare(groupSize, dShares, dResults);
-  // for (int i=0; i<groupSize; i++) {
-  //   cout << "a[" << i << "] = " << aResults[i] << "   "
-  //        << "b[" << i << "] = " << bResults[i] << endl;
-  // }
-  // cout << "d[0] = " << dResults[0] << endl;
-  // // ---- TODO: delete ^^^ ----
-    
   // -- build polynomials, and verify by open
   // interpolate A[i], B[i], and C
   vector<vector<FieldType>> AShares;
   vector<vector<FieldType>> BShares;
   vector<FieldType> CShare;
-
-  cout << "before building polys" << endl;
   buildPolyVec(aShares, bShares, cShare, dShares, vecSize,
                AShares, BShares, CShare);
-  cout << "after buliding polys" << endl;
   
   // eval at random coin
   vector<FieldType> ASecrets(vecSize);
@@ -648,9 +549,7 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   vector<FieldType> CSecret(1, interp.evalPolynomial(lambda, CShare));
   evalPolyVecAt(AShares, ASecrets, lambda);
   evalPolyVecAt(BShares, BSecrets, lambda);
-
-  cout << "C[0] = " << CSecret[0] << endl;
-
+  
   // open and verify
   vector<FieldType> AResults(vecSize);
   openShare(vecSize, ASecrets, AResults);
@@ -658,7 +557,6 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   openShare(vecSize, BSecrets, BResults);
   vector<FieldType> CResult(1);
   openShare(1, CSecret, CResult);
-  cout << "after open C" << endl;
     
   for (int i = 0; i < vecSize; i++) {
     CResult[0] = CResult[0] - AResults[i] * BResults[i];
@@ -1745,5 +1643,4 @@ template <class FieldType> ProtocolParty<FieldType>::~ProtocolParty() {
   delete timer;
   // delete comm;
 }
-
 #endif /* PROTOCOLPARTY_H_ */
