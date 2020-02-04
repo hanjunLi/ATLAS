@@ -30,6 +30,7 @@ using namespace std;
 using namespace std::chrono;
 
 // TODO: refactor
+// TODO: add work to main thread for ``round functions''
 // TODO: spread reconstruct loads
 
 template <class FieldType>
@@ -40,7 +41,7 @@ private:
   Interpolate<FieldType> interp; // evaluate (O(n)), interpolate polynomials (O(n^2))
   
   // -- global const
-  int numThreads = 1;      // TODO: add as main arguments later
+  int numThreads = 2;      // TODO: add as main arguments later
   int _K = 4;              // interpolation degree <=> 'shrink' factor
   
   // -- global variables
@@ -123,6 +124,10 @@ public:
                     vector<vector<FieldType>>& AShares,
                     vector<vector<FieldType>>& BShares,
                     vector<FieldType>& CShare);
+  void buildPolyVecIndWorker(vector<FieldType>& aShares, vector<FieldType>& bShares,
+                             vector< vector<FieldType> >& ASharesEval,
+                             vector< vector<FieldType> >& BSharesEval,
+                             int groupSize, int threadId);
   void buildPolyVecInd(vector<FieldType>& aShares, vector<FieldType>& bShares,
                        vector<FieldType>& dShares, int groupSize);
   void compressVerifyVec(vector<FieldType>& aShares,
@@ -400,20 +405,15 @@ buildPolyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
 
 template <class FieldType>
 void ProtocolParty<FieldType>::
-buildPolyVecInd(vector<FieldType>& aShares, vector<FieldType>& bShares,
-                vector<FieldType>& dShares, int groupSize) {
-
-  // batchDegree is _K except in the base case
-  int batchDegree = (aShares.size() + groupSize - 1) / groupSize;
+buildPolyVecIndWorker(vector<FieldType>& aShares, vector<FieldType>& bShares,
+                      vector< vector<FieldType> >& ASharesEval,
+                      vector< vector<FieldType> >& BSharesEval,
+                      int groupSize, int threadId) {
   int totalLength = aShares.size();
-  
-  // interpolate A[i], B[i] and evaluate at A(k), ..., A(2k-2), B(k), ..., B(2k-2)
-  vector< vector<FieldType> > ASharesEval(groupSize, vector<FieldType>(_K-1));
-  vector< vector<FieldType> > BSharesEval(groupSize, vector<FieldType>(_K-1));
   vector<FieldType> ySharesA;   // tmp vector
   vector<FieldType> ySharesB;   // tmp vector
-  // TODO: refactor
-  for (int i=0; i<groupSize; i++) {
+  
+  for (int i=threadId; i<groupSize; i+= numThreads) {
     ySharesA.clear();
     ySharesB.clear();
     for (int j=i; j<totalLength; j+=groupSize) {
@@ -423,6 +423,54 @@ buildPolyVecInd(vector<FieldType>& aShares, vector<FieldType>& bShares,
     matrix_for_k.MatrixMult(ySharesA, ASharesEval[i]);
     matrix_for_k.MatrixMult(ySharesB, BSharesEval[i]);
   }
+}
+
+template <class FieldType>
+void ProtocolParty<FieldType>::
+buildPolyVecInd(vector<FieldType>& aShares, vector<FieldType>& bShares,
+                vector<FieldType>& dShares, int groupSize) {
+
+  // batchDegree is _K except in the base case
+  int batchDegree = (aShares.size() + groupSize - 1) / groupSize;
+  
+  // interpolate A[i], B[i] and evaluate at A(k), ..., A(2k-2), B(k), ..., B(2k-2)
+  vector< vector<FieldType> > ASharesEval(groupSize, vector<FieldType>(_K-1));
+  vector< vector<FieldType> > BSharesEval(groupSize, vector<FieldType>(_K-1));
+
+  // Do multi-threading here
+  vector<thread> threads;
+  if (numThreads > 1) {
+    threads.resize(numThreads-1);
+    for (int t=0; t < numThreads-1; t++) {
+      // bring up thread workers
+      threads[t] = thread(&ProtocolParty::buildPolyVecIndWorker, this,
+                          ref(aShares), ref(bShares),
+                          ref(ASharesEval), ref(BSharesEval), groupSize, t+1);
+    }
+  }
+  
+  int totalLength = aShares.size();
+  vector<FieldType> ySharesA;   // tmp vector
+  vector<FieldType> ySharesB;   // tmp vector
+  
+  for (int i=0; i<groupSize; i+= numThreads) {
+    ySharesA.clear();
+    ySharesB.clear();
+    for (int j=i; j<totalLength; j+=groupSize) {
+      ySharesA.push_back(aShares[j]);
+      ySharesB.push_back(bShares[j]);
+    }
+    matrix_for_k.MatrixMult(ySharesA, ASharesEval[i]);
+    matrix_for_k.MatrixMult(ySharesB, BSharesEval[i]);
+  }
+
+  if (numThreads > 1) {
+    // join thread workers
+    for (int t=0; t < numThreads-1; t++) {
+      threads[t].join();
+    }
+  }
+
 
   // vector-mult to get the rest of dShares
   vector<FieldType> ASharesEvalFlat(groupSize * (_K - 1));
