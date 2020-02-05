@@ -1553,19 +1553,15 @@ void ProtocolParty<FieldType>::roundFunctionSync(vector<vector<byte>> &sendBufs,
   // -- recieve the data using threads
   // direct send to myself
   recBufs[m_partyId] = move(sendBufs[m_partyId]);
-  vector<thread> threads(numThreads);
-  for (int t = 0; t < numThreads; t++) {
-    if ((t + 1) * numPartiesForEachThread <= parties.size()) {
+  vector<thread> threads(numThreads-1);
+  for (int t = 0; t < numThreads-1; t++) {
       threads[t] = thread(&ProtocolParty::exchangeData, this, ref(sendBufs),
                           ref(recBufs), t * numPartiesForEachThread,
                           (t + 1) * numPartiesForEachThread);
-    } else {
-      threads[t] =
-          thread(&ProtocolParty::exchangeData, this, ref(sendBufs),
-                 ref(recBufs), t * numPartiesForEachThread, parties.size());
-    }
   }
-  for (int t = 0; t < numThreads; t++) {
+  exchangeData(sendBufs, recBufs,
+               (numThreads-1) * numPartiesForEachThread, parties.size());
+  for (int t = 0; t < numThreads-1; t++) {
     threads[t].join();
   }
 }
@@ -1623,18 +1619,16 @@ void ProtocolParty<FieldType>::recToP1(
 
   recBufs[m_partyId] = myShare;
   // recieve the data using threads
-  vector<thread> threads(numThreads);
-  for (int t = 0; t < numThreads; t++) {
-    if ((t + 1) * numPartiesForEachThread <= parties.size()) {
+  vector<thread> threads(numThreads-1);
+  for (int t = 0; t < numThreads-1; t++) {
       threads[t] = thread(&ProtocolParty::recDataToP1, this, ref(recBufs),
                           t * numPartiesForEachThread,
                           (t + 1) * numPartiesForEachThread);
-    } else {
-      threads[t] = thread(&ProtocolParty::recDataToP1, this, ref(recBufs),
-                          t * numPartiesForEachThread, parties.size());
-    }
   }
-  for (int t = 0; t < numThreads; t++) {
+  recDataToP1(recBufs, (numThreads-1) * numPartiesForEachThread,
+              parties.size());
+  
+  for (int t = 0; t < numThreads-1; t++) {
     threads[t].join();
   }
 }
@@ -1660,18 +1654,16 @@ void ProtocolParty<FieldType>::sendFromP1(vector<byte> &sendBuf) {
   }
 
   // send data using threads
-  vector<thread> threads(numThreads);
-  for (int t = 0; t < numThreads; t++) {
-    if ((t + 1) * numPartiesForEachThread <= parties.size()) {
+  vector<thread> threads(numThreads-1);
+  for (int t = 0; t < numThreads-1; t++) {
       threads[t] = thread(&ProtocolParty::sendDataFromP1, this, ref(sendBuf),
                           t * numPartiesForEachThread,
                           (t + 1) * numPartiesForEachThread);
-    } else {
-      threads[t] = thread(&ProtocolParty::sendDataFromP1, this, ref(sendBuf),
-                          t * numPartiesForEachThread, parties.size());
-    }
   }
-  for (int t = 0; t < numThreads; t++) {
+  
+  sendDataFromP1(sendBuf, (numThreads-1) * numPartiesForEachThread, parties.size());
+  
+  for (int t = 0; t < numThreads-1; t++) {
     threads[t].join();
   }
 }
