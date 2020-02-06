@@ -4,8 +4,8 @@ project(MPCHonestMajorityNoTriples)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -std=c++11 -maes -mpclmul -mbmi2")
 
-INCLUDE_DIRECTORIES($ENV{HOME}/ntl-11.4.1/include $ENV{HOME} $ENV{HOME}/libscapi/install/include
-        $ENV{HOME}/libscapi/install/include/OTExtensionBristol)
+INCLUDE_DIRECTORIES($ENV{HOME}/libscapi/install/include $ENV{HOME}
+  $ENV{HOME}/libscapi/install/include/OTExtensionBristol)
 
 set(SOURCE_FILES main.cpp
         ProtocolParty.cpp ProtocolParty.h ProtocolTimer.cpp ProtocolTimer.h
@@ -19,6 +19,6 @@ link_directories(/usr/ssl/lib/ $ENV{HOME}/libscapi/install/lib )
 
 add_executable(MPCHonestMajorityNoTriples ${SOURCE_FILES})
 
-TARGET_LINK_LIBRARIES(MPCHonestMajorityNoTriples $ENV{HOME}/ntl-11.4.1/src/ntl.a
+TARGET_LINK_LIBRARIES(MPCHonestMajorityNoTriples $ENV{HOME}/libscapi/build/NTL/src/ntl.a
         $ENV{HOME}/libscapi/libscapi.a gmp gmpxx
         libboost_system.a libboost_thread.a pthread crypto dl ssl z)
