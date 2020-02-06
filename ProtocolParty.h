@@ -24,13 +24,12 @@
 #include <cmath>
 
 #define flag_print false
-#define flag_print_output true
+#define flag_print_output false
 
 using namespace std;
 using namespace std::chrono;
 
 // TODO: refactor
-// TODO: add work to main thread for ``round functions''
 // TODO: spread reconstruct loads
 
 template <class FieldType>
@@ -510,7 +509,7 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   vector<vector<FieldType>> BShares;
   vector<FieldType> CShare;
 
-  cout << "---- cur groupSize: " << groupSize << endl;
+  // cout << "---- cur groupSize: " << groupSize << endl;
 
   // -- one DN mult for each group i to compute   
   // build dShares 0 .. k-2
@@ -1010,7 +1009,7 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
     4 * (keySize + verifyIterations) + 2 * _K + nCompressions + 2;
   _singleSharesOffset = 0;
   generateRandomShares(numSingleShares, _singleSharesArray);
-  cout << "generated single Shares: " << numSingleShares << endl;
+  // cout << "generated single Shares: " << numSingleShares << endl;
   
   // ---- # of random double shares:
   // 1. Compute Mult gates in the circuit
@@ -1021,7 +1020,7 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
     this->numOfMultGates + (nCompressions+1)*_K*2;
   _doubleSharesOffset = 0;
   offlineDNForMultiplication(numDoubleShares);
-  cout << "generated doubles: " << numDoubleShares << endl;
+  // cout << "generated doubles: " << numDoubleShares << endl;
   return true;
 }
 
