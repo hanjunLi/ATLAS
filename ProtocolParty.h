@@ -336,7 +336,7 @@ template <class FieldType> void ProtocolParty<FieldType>::runOnline() {
 
 template <class FieldType>
 void ProtocolParty<FieldType>::computationPhase() {
-  int countNumMult = _doubleSharesOffset / 2;
+  int countNumMult = _doubleSharesOffset;
   int numOfLayers = circuit.getLayers().size();
   for (int i = 0; i < numOfLayers - 1; i++) {
     currentCircuitLayer = i;
@@ -505,26 +505,19 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   } // else : recursive case:
   // -- divide into K groups
   int groupSize = (totalLength + _K -1 )/ _K;
-  
-  vector<vector<FieldType>> AShares;
-  vector<vector<FieldType>> BShares;
-  vector<FieldType> CShare;
-
-  cout << "---- cur groupSize: " << groupSize << endl;
 
   // -- one DN mult for each group i to compute   
   // build dShares 0 .. k-2
   vector<FieldType> dShares;
   DNMultVec(aShares, bShares, dShares, groupSize);
+
   // build dShares k-1: c - d_0 - ... - d_{k-2}
   dShares[_K-1] = cShare;
   for (int i = 0; i< _K - 1; i++) {
     dShares[_K-1] = dShares[_K-1] - dShares[i];
   }
-
   aShares.resize( groupSize * _K, field->GetElement(0) );
   bShares.resize( groupSize * _K, field->GetElement(0) );
-  
   buildPolyVecInd(aShares, bShares, dShares, groupSize);
   vector<FieldType> aSharesNew(groupSize);
   vector<FieldType> bSharesNew(groupSize);
@@ -566,8 +559,6 @@ void ProtocolParty<FieldType>::
 verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
           FieldType& cShare){
 
-  auto start_time = high_resolution_clock::now();
-
   // -- append random shares vec(a)_N, vec(b)_N, c_N
   int vecSize = aShares.size();
   vector<FieldType> aN(vecSize);
@@ -605,7 +596,7 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   openShare(vecSize, BSecrets, BResults);
   vector<FieldType> CResult(1);
   openShare(1, CSecret, CResult);
-    
+
   for (int i = 0; i < vecSize; i++) {
     CResult[0] = CResult[0] - AResults[i] * BResults[i];
   }
@@ -1359,7 +1350,7 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
       xyMinusRShares[group_i] += a[i] * b[i];
     }
     xyMinusRShares[group_i] = xyMinusRShares[group_i] -
-      _doubleSharesArray[_doubleSharesOffset + 2*group_i + 1];
+      _doubleSharesArray[(_doubleSharesOffset + group_i)*2 + 1];
   }
 
   for (int group_i = 0; group_i < numOfMults; group_i++) {
@@ -1417,10 +1408,10 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
   // -- compute xy - r + [r]_t = t-sharing of xy
   for (int group_i = 0; group_i < numOfMults; group_i++) {
     c[group_i] =
-      _doubleSharesArray[_doubleSharesOffset + 2*group_i] + xyMinusR[group_i];
+      _doubleSharesArray[(_doubleSharesOffset + group_i)*2] + xyMinusR[group_i];
   }
 
-  _doubleSharesOffset += numOfMults * 2;
+  _doubleSharesOffset += numOfMults;
 }
 
 template <class FieldType>
