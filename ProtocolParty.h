@@ -23,14 +23,12 @@
 #include "Interpolate.h"
 #include <cmath>
 
-#define flag_print true
-#define flag_print_output true
+#define flag_print false
+#define flag_print_output false
 
 using namespace std;
 using namespace std::chrono;
 
-// TODO: refactor
-// TODO: spread reconstruct loads
 
 template <class FieldType>
 class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
@@ -288,7 +286,7 @@ template <class FieldType> void ProtocolParty<FieldType>::readMyInputs() {
   while(myfile>>input)
   {
     //myfile >> input;
-	cout <<"input read "<<i<<":"<<input<<endl;
+	//cout <<"input read "<<i<<":"<<input<<endl;
     if (i >= myInputs.size()){
       cout << "inputs file " << this->inputsFile <<endl;
       cout << "have more than " << (i+1) << " inputs!" << endl;
@@ -297,11 +295,13 @@ template <class FieldType> void ProtocolParty<FieldType>::readMyInputs() {
     
     myInputs[i++] = input;
   } //while (!(myfile.eof()));
+  if(flag_print)
+	  cout<<"Read Done!"<<endl;
   myfile.close();
 }
 
 template <class FieldType> void ProtocolParty<FieldType>::run() {
-
+  int tottme = 0;
   for (iteration = 0; iteration < times; iteration++) {
 
     auto t1start = high_resolution_clock::now();
@@ -315,7 +315,11 @@ template <class FieldType> void ProtocolParty<FieldType>::run() {
 
     auto duration = duration_cast<milliseconds>(t2end - t1start).count();
     protocolTimer->totalTimeArr[iteration] = duration;
+	tottme += duration;
   }
+  cout<<"Total time:"<<tottme<<endl;
+  cout<<"Gates:"<<numOfMultGates + numOfCompareGates<<endl;
+  cout<<"Ave time:"<<(double)tottme / times / (numOfMultGates + numOfCompareGates);
 }
 
 template <class FieldType> void ProtocolParty<FieldType>::runOffline() {
@@ -362,7 +366,8 @@ template <class FieldType> void ProtocolParty<FieldType>::runOnline() {
 
   t1 = high_resolution_clock::now();
   timer->startSubTask("VerificationPhase", iteration);
-  verificationPhase();
+  //ONLY FOR TEST PURPOSE
+  //verificationPhase();
   timer->endSubTask("VerificationPhase", iteration);
   t2 = high_resolution_clock::now();
   duration = duration_cast<milliseconds>(t2 - t1).count();
@@ -383,16 +388,26 @@ void ProtocolParty<FieldType>::computationPhase() {
   int countNumMult = _doubleSharesOffset;
   int numOfLayers = circuit.getLayers().size();
   for (int i = 0; i < numOfLayers - 1; i++) {
+	  if(flag_print)
+		  cout<<"Now at layer "<<i<<"/"<<numOfLayers<<endl;
     currentCircuitLayer = i;
     // send the index of the current mult gate
     processNotMult();
-    countNumMult += processMultiplications(countNumMult);
+	if(flag_print)
+		cout<<countNumMult<<endl;
+	//TODO: just for test
+  	countNumMult += processMultiplications(countNumMult);
+	if(flag_print)
+		cout<<"layer finished"<<endl;
+
   }
   _doubleSharesOffset = countNumMult;
 }
 
 template <class FieldType>
 void ProtocolParty<FieldType>::verificationPhase() {
+	if(flag_print)
+		cout<<"Now at Verification"<<endl;
   vector<FieldType> aShares(this->numOfMultGates);
   vector<FieldType> bShares(this->numOfMultGates);
   FieldType cShare = *(field->GetZero());
@@ -413,7 +428,11 @@ void ProtocolParty<FieldType>::verificationPhase() {
       lambdaI *= lambda;
     }
   }
+  if(flag_print)
+	  cout<<"Ready for Verify"<<endl;
   compressVerifyVec(aShares, bShares, cShare);
+  if(flag_print)
+	  cout<<"Verify end"<<endl;
 }
 
 template <class FieldType>
@@ -545,6 +564,8 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
 
   int totalLength = aShares.size();
   if (totalLength <= _K) { // base case:
+	  if(flag_print)
+		  cout<<"Base case"<<endl;
     verifyVec(aShares, bShares, cShare);
     return;
   } // else : recursive case:
@@ -557,7 +578,8 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   // build dShares 0 .. k-2
   vector<FieldType> dShares;
   DNMultVec(aShares, bShares, dShares, groupSize);
-
+  if(flag_print)
+	  cout<<"1st DNMult end"<<endl;
   // build dShares k-1: c - d_0 - ... - d_{k-2}
   dShares[_K-1] = cShare;
   for (int i = 0; i< _K - 1; i++) {
@@ -566,10 +588,15 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   aShares.resize( groupSize * _K, field->GetElement(0) );
   bShares.resize( groupSize * _K, field->GetElement(0) );
   buildPolyVecInd(aShares, bShares, dShares, groupSize);
+  if(flag_print)
+	  cout<<"Ind built"<<endl;
   vector<FieldType> aSharesNew(groupSize);
   vector<FieldType> bSharesNew(groupSize);
+  if(flag_print)
+	  cout<<"At middle"<<endl;
   FieldType lambda = randomCoin();
-
+  if(flag_print)
+	  cout<<"Get randomcoin"<<endl;
   HIM<FieldType> matrix_for_k_lambda;
   HIM<FieldType> matrix_for_2k_lambda;
   vector<FieldType> beta_lambda(1);
@@ -799,17 +826,23 @@ void ProtocolParty<FieldType>::generateRandomShares(
   // every round N-T random shares are generated.
   int fieldByteSize = field->getElementSizeInBytes();
   int no_buckets = (numOfRandoms / (N - T)) + 1;
+  if(flag_print)
+	  cout<<"Resizing "<<no_buckets<<","<<N<<","<<T<<","<<no_buckets * (N-T) <<endl;
   randomElementsToFill.resize(no_buckets * (N - T));
   // N vectors of no_buckets size
   vector<vector<FieldType>> sendBufsElements(N);
   // N vectors of no_buckets elements in bytes
   vector<vector<byte>> sendBufsBytes(N);
   vector<vector<byte>> recBufsBytes(N);
+  if(flag_print)
+	  cout<<"Resizing"<<endl;
   for (int i = 0; i < N; i++) {
     sendBufsElements[i].resize(no_buckets);
     sendBufsBytes[i].resize(no_buckets * fieldByteSize);
     recBufsBytes[i].resize(no_buckets * fieldByteSize);
   }
+  if(flag_print)
+	  cout<<"Resized"<<endl;
 
   // -- generate no_buckets number of random t-sharings
   for (int k = 0; k < no_buckets; k++) {
@@ -857,7 +890,7 @@ if(randomElementsToFill.size()<numOfRandoms)
 	randomElementsToFill.resize(numOfRandoms);
  if(_singleSharesOffset + numOfRandoms > _singleSharesArray.size())
  {
-	 if(flag_print)
+	 //if(flag_print)
 		 cout<<"Not enough single elements!"<<endl;
 	 //int lft = _singleShareArray.size() - _singleSharesOffset;
   	 //randomElementsToFill.assign(_singleSharesArray.begin() + _singleSharesOffset,
@@ -1112,14 +1145,16 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
   //	3 * fieldSize (+ possibility may fail?
   if(flag_print)
 	  cout<<"entering preparation phase"<<endl;
-  cout<<"eleSize:"<<eleSize<<endl;
-  cout<<"#comp:"<<numOfCompareGates<<endl;
+  //cout<<"eleSize:"<<eleSize<<endl;
+  //cout<<"#comp:"<<numOfCompareGates<<endl;
   int nCompressions = (int)(log(this->numOfMultGates) / log(_K) + 0.5);
   int numSingleShares =
     4 * (keySize + verifyIterations) + 2 * _K + nCompressions + 2
-	+ 120 * eleSize *numOfCompareGates;
-  cout<<"should have num:"<<numSingleShares<<endl;
+	+ 60 * eleSize *numOfCompareGates;
+  //cout<<"should have num:"<<numSingleShares<<endl;
   _singleSharesOffset = 0;
+  if(flag_print)
+	  cout<<"Generating single Share"<<endl;
   generateRandomShares(numSingleShares, _singleSharesArray);
   if(flag_print)
 	   cout << "generated single Shares: " << numSingleShares << endl;
@@ -1130,7 +1165,7 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
   // 2. Compress Verification
   //    -- 2 * _K * (nCompressions + 1)
   int numDoubleShares =
-    this->numOfMultGates + (nCompressions+1)*_K*2 + 2000 * eleSize * this->numOfCompareGates;
+    this->numOfMultGates + (nCompressions+1)*_K*2 + 100 * eleSize * this->numOfCompareGates;
   _doubleSharesOffset = 0;
   offlineDNForMultiplication(numDoubleShares);
   _bitShareOffset=0;
@@ -1435,6 +1470,8 @@ int ProtocolParty<FieldType>::processMultDN(int indexInRandomArray) {
   int fieldByteSize = field->getElementSizeInBytes();
   int maxNumberOfLayerMult = circuit.getLayers()[currentCircuitLayer + 1] -
                              circuit.getLayers()[currentCircuitLayer];
+  if(flag_print)
+	  cout<<"limit this layer:"<<maxNumberOfLayerMult<<endl;
   vector<FieldType> xyMinusRShares(maxNumberOfLayerMult);
   vector<FieldType> xyMinusR;
   vector<byte> xyMinusRBytes;
@@ -1450,6 +1487,8 @@ int ProtocolParty<FieldType>::processMultDN(int indexInRandomArray) {
 
     if (gate.gateType == MULT) {
       // compute the share of xy-r
+	  if(flag_print)
+		  cout<<"Find a mult Gate"<<endl;
       xyMinusRShares[index] =
           gateShareArr[gate.input1] * gateShareArr[gate.input2] -
           _doubleSharesArray[2 * indexInRandomArray + 1];
@@ -1606,8 +1645,8 @@ void ProtocolParty<FieldType>::
 DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
           vector<FieldType>& c, int groupSize) {
   // assert( a.size() == b.size() );
-  //if(flag_print)
-	//  cout<<"Entering DNMult, sizes:"<<a.size()<<","<<b.size()<<endl;
+  if(flag_print)
+	  cout<<"Entering DNMult, sizes:"<<a.size()<<","<<b.size()<<endl;
   int totalLength = a.size();
   int numOfMults = (totalLength + groupSize - 1) / groupSize;
   int fieldByteSize = field->getElementSizeInBytes();
@@ -1617,8 +1656,8 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
   vector<FieldType> xyMinusR(numOfMults);
   vector<byte> xyMinusRBytes(numOfMults * fieldByteSize);
   vector<vector<byte>> recBufsBytes;
- // if(flag_print)
-//	  cout<<"# of mult:"<<numOfMults<<endl;
+  if(flag_print)
+	  cout<<"# of mult:"<<numOfMults<<endl;
   // -- generate the 2t-sharings for xy - r
   for (int group_i = 0; group_i < numOfMults; group_i++) {
     int group_end = (group_i + 1) * groupSize > totalLength ?
@@ -1633,8 +1672,8 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
     field->elementToBytes(xyMinusRSharesBytes.data() +
                           (group_i * fieldByteSize), xyMinusRShares[group_i]);
   }
- //if(flag_print)
-//	 cout<<"generated 2t-sharing"<<endl;
+ if(flag_print)
+	 cout<<"generated 2t-sharing"<<endl;
   // -- gather from all to p0
   if (this->m_partyId == 0) {
     // p0 receive the shares from all the other parties
@@ -1648,8 +1687,8 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
     this->parties[0]->getChannel()->write(xyMinusRSharesBytes.data(),
                                           xyMinusRSharesBytes.size());
   }
-//	if(flag_print)
-//		cout<<"p0 received"<<endl;
+	if(flag_print)
+		cout<<"p0 received"<<endl;
   // -- p0 reconstruct the shares and send to all
   if (this->m_partyId == 0) {
     vector<FieldType> xyMinurAllShares(N);
@@ -1689,8 +1728,8 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
     c[group_i] =
       _doubleSharesArray[(_doubleSharesOffset + group_i)*2] + xyMinusR[group_i];
   }
-  //if(flag_print)
-	//  cout<<"DN ended"<<endl;
+  if(flag_print)
+	  cout<<"DN ended"<<endl;
   _doubleSharesOffset += numOfMults;
 }
 
@@ -1767,6 +1806,8 @@ FieldType ProtocolParty<FieldType>::randomCoin() {
  * @param alpha
  */
 template <class FieldType> void ProtocolParty<FieldType>::outputPhase() {
+	if(flag_print)
+		cout<<"Entering Output"<<endl;
   vector<FieldType> x1(N); // vector for the shares of my outputs
   vector<vector<FieldType>> sendBufsElements(N);
   vector<vector<byte>> sendBufsBytes(N);
@@ -2053,8 +2094,12 @@ void ProtocolParty<FieldType>::compRandom(const TGate &gate)
 	tmp2 = x + y - FieldType(2) * tmp;
 	compSingleMult(w,tmp2,tmp3);
 	gateShareArr[gate.output] = tmp3 + FieldType(1) - y - x + tmp;
-	//if(flag_print)
+	if(flag_print)
+	{
 		cout<<"compRandom ended"<<endl;
+		cout<<"Used single:"<<_singleSharesOffset<<"/"<<_singleSharesArray.size()<<","<<(double)_singleSharesOffset / _singleSharesArray.size()<<",left:"<<_singleSharesArray.size() - _singleSharesOffset << endl;
+		cout<<"Used double:"<<2 * _doubleSharesOffset<<"/"<<_doubleSharesArray.size()<<","<<(double)2*_doubleSharesOffset / _doubleSharesArray.size()<<",left:"<<-2*_doubleSharesOffset + _doubleSharesArray.size()<<endl;
+	}
 }
 //compute single mult a * b
 template<class FieldType>
@@ -2547,6 +2592,8 @@ void ProtocolParty<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,
 				cout<<d0[i]<<",";
 			cout<<endl;
 		}
+		//no need to compare ??
+		//IF NO NEED TO COMPARE, JUST COMMENT THE FOLLOWING LINES BY /*
 		compP(bits[suc],chk_suc);
 		if(flag_print)
 		{
@@ -2562,15 +2609,13 @@ void ProtocolParty<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,
 		//compGiven(bits[suc],_PRIME,chk_suc);
 		//compBits(bits[suc],_PBits,chk_suc);
 		vector<FieldType> vc1(1),vc2(1);
-		//vc1.resize(1); 
 		vc1[0]=chk_suc;
-		//vc2.resize(1); vc2[0]=chk_res;
 		openShare(1,vc1,vc2);
 		//TODO: can we use '=' like this?
 		//notice: compGiven gives [p < c], here we need to change direction
 		if(flag_print)
 			cout<<"Comp result:"<<vc2[0]<<endl;
-		if(vc2[0]==FieldType(0)) //valid share
+		if(vc2[0]==FieldType(0)) //valid share */
 		{
 			//openShare(1,bits[suc],d0);
 			//res[suc] = 0;

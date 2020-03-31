@@ -1,8 +1,8 @@
 #! /bin/bash
 n=3
-inp=inputs.txt
+inp=input30.txt
 typ=Zp
-cir=circuit.txt
+cir=comp_circuit2.txt
 pty=Parties.txt
 itr=1
 for i in `seq 0 1 2`;
