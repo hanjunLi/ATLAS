@@ -41,8 +41,8 @@ private:
   
   // -- global const
   int numThreads = 2;      // TODO: add as main arguments later
-  int _K = 4;              // interpolation degree <=> 'shrink' factor
-  
+  int _K = 13;             // interpolation degree <=> 'shrink' factor
+    
   // -- global variables
   int iteration;                       // current iteration number
   int currentCircuitLayer = 0;         // current circuit layer
@@ -504,8 +504,9 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   } // else : recursive case:
   // -- divide into K groups
   int groupSize = (totalLength + _K -1 )/ _K;
-
-  // cout << "---- cur groupSize: " << groupSize << endl;
+  aShares.resize( groupSize * _K, field->GetElement(0) );
+  bShares.resize( groupSize * _K, field->GetElement(0) );
+  totalLength = groupSize * _K;
 
   // -- one DN mult for each group i to compute   
   // build dShares 0 .. k-2
@@ -517,8 +518,7 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   for (int i = 0; i< _K - 1; i++) {
     dShares[_K-1] = dShares[_K-1] - dShares[i];
   }
-  aShares.resize( groupSize * _K, field->GetElement(0) );
-  bShares.resize( groupSize * _K, field->GetElement(0) );
+  
   buildPolyVecInd(aShares, bShares, dShares, groupSize);
   vector<FieldType> aSharesNew(groupSize);
   vector<FieldType> bSharesNew(groupSize);
@@ -573,7 +573,7 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   DNMultVec(aShares, bShares, dShares, vecSize);
 
   cShare += dShares[1];
-
+  dShares[1] = cShare - dShares[0];
   // -- build polynomials, and verify by open
   // interpolate A[i], B[i], and C
   vector<vector<FieldType>> AShares;
