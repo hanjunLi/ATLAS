@@ -1,6 +1,5 @@
 
 #include "ProtocolParty.h"
-#include "ZpKaratsubaElement.h"
 #include <inttypes.h>
 #include <smmintrin.h>
 #include <stdio.h>
@@ -76,48 +75,10 @@ int main(int argc, char *argv[]) {
          << endl;
     cout << "end main" << '\n';
 
+  } else {
+    cout << "field not implemented" << '\n';
   }
 
-  else if (fieldType.compare("ZpKaratsuba") == 0) {
-    ProtocolParty<ZpKaratsubaElement> protocol(argc, argv);
-    auto t1 = high_resolution_clock::now();
-    protocol.run();
-
-    auto t2 = high_resolution_clock::now();
-
-    auto duration = duration_cast<milliseconds>(t2 - t1).count();
-    cout << "time in milliseconds for " << times << " runs: " << duration
-         << endl;
-    cout << "end main" << '\n';
-  }
-
-  else if (fieldType.compare("GF2m") == 0) {
-    ProtocolParty<GF2E> protocol(argc, argv);
-    auto t1 = high_resolution_clock::now();
-    protocol.run();
-
-    auto t2 = high_resolution_clock::now();
-
-    auto duration = duration_cast<milliseconds>(t2 - t1).count();
-    cout << "time in milliseconds for " << times << " runs: " << duration
-         << endl;
-    cout << "end main" << '\n';
-  }
-
-  else if (fieldType.compare("Zp") == 0) {
-    ProtocolParty<ZZ_p> protocol(argc, argv);
-
-    auto t1 = high_resolution_clock::now();
-
-    protocol.run();
-
-    auto t2 = high_resolution_clock::now();
-
-    auto duration = duration_cast<milliseconds>(t2 - t1).count();
-    cout << "time in milliseconds for " << times << " runs: " << duration
-         << endl;
-    cout << "end main" << '\n';
-  }
 
   return 0;
 }

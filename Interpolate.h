@@ -1,4 +1,4 @@
-// author: Hanjun Li <hanjunl@andrew.cmu.edu>
+// author: Hanjun Li <lihanjun1212@gmail.com>
 
 #ifndef INTERPOLATE_H_
 #define INTERPOLATE_H_
