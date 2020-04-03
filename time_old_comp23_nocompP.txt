@@ -1,0 +1,135 @@
+Running 0...
+Running 1...
+Running 2...
+key = partyID value = 2
+key = partiesNumber value = 3
+key = inputFile value = inputs.txt
+key = outputFile value = output.txt
+key = circuitFile value = comp_circuit2.txt
+key = fieldType value = Zp
+key = partiesFile value = Parties.txt
+key = internalIterationsNumber value = 10
+fieldType = Zp
+key = partyID value = 2
+key = partiesNumber value = 3
+key = inputFile value = inputs.txt
+key = outputFile value = output.txt
+key = circuitFile value = comp_circuit2.txt
+key = fieldType value = Zp
+key = partiesFile value = Parties.txt
+key = internalIterationsNumber value = 10
+key = partyID value = 1
+key = partiesNumber value = 3
+key = inputFile value = inputs.txt
+key = outputFile value = output.txt
+key = circuitFile value = comp_circuit2.txt
+key = fieldType value = Zp
+key = partiesFile value = Parties.txt
+key = internalIterationsNumber value = 10
+fieldType = Zp
+key = partyID value = 1
+key = partiesNumber value = 3
+key = inputFile value = inputs.txt
+key = outputFile value = output.txt
+key = circuitFile value = comp_circuit2.txt
+key = fieldType value = Zp
+key = partiesFile value = Parties.txt
+key = internalIterationsNumber value = 10
+# of inputs:6
+in communication
+num parties = 3
+my id = 1
+my port = 8200
+other port = 8000
+Failed to connect. sleeping for 500 milliseconds, connect: Connection refused
+# of inputs:6
+in communication
+num parties = 3
+my id = 2
+my port = 8400
+other port = 8001
+Failed to connect. sleeping for 500 milliseconds, connect: Connection refused
+key = partyID value = 0
+key = partiesNumber value = 3
+key = inputFile value = inputs.txt
+key = outputFile value = output.txt
+key = circuitFile value = comp_circuit2.txt
+key = fieldType value = Zp
+key = partiesFile value = Parties.txt
+key = internalIterationsNumber value = 10
+fieldType = Zp
+key = partyID value = 0
+key = partiesNumber value = 3
+key = inputFile value = inputs.txt
+key = outputFile value = output.txt
+key = circuitFile value = comp_circuit2.txt
+key = fieldType value = Zp
+key = partiesFile value = Parties.txt
+key = internalIterationsNumber value = 10
+# of inputs:6
+in communication
+num parties = 3
+my id = 0
+my port = 8000
+other port = 8200
+accepting...
+accepting...
+channel established
+my port = 8201
+other port = 8401
+Failed to connect. sleeping for 500 milliseconds, connect: Connection refused
+channel established
+my port = 8001
+other port = 8400
+accepting...
+accepting...
+channel established
+my port = 8401
+other port = 8201
+accepting...
+channel established
+accepting...
+channel established
+channel established
+Total time:116420
+Gates:109
+Ave time:106.807time in milliseconds for 10 runs: 116424
+Total time:116435
+Gates:109
+Ave time:106.821time in milliseconds for 10 runs: 116439
+Total time:116440
+Gates:109
+Ave time:106.826time in milliseconds for 10 runs: 116444
+end main
+Times7392,64,3302,0,6,10767,
+Times6264,78,3296,0,7,9647,
+Times7105,86,3903,0,9,11104,
+Times7328,92,3590,0,8,11019,
+Times7068,95,3760,0,8,10932,
+Times7203,117,3639,0,9,10971,
+Times8002,166,4361,0,6,12536,
+Times7925,163,4321,0,6,12416,
+Times7934,110,4315,0,15,12376,
+Times10158,116,4379,0,12,14667,
+end main
+Times7367,84,3303,0,1,10758,
+Times6249,96,3298,0,1,9646,
+Times7095,101,3904,0,1,11103,
+Times7323,101,3594,0,0,11019,
+Times7056,108,3763,0,0,10932,
+Times7228,97,3641,0,3,10971,
+Times8050,122,4364,0,0,12538,
+Times7968,127,4319,0,0,12416,
+Times7899,158,4307,0,0,12367,
+Times10158,130,4380,0,0,14670,
+end main
+Times7406,43,3302,0,10,10764,
+Times6270,67,3298,0,11,9647,
+Times7069,121,3901,0,12,11104,
+Times7307,110,3588,0,12,11020,
+Times7041,116,3762,0,11,10932,
+Times7186,129,3641,0,13,10972,
+Times8056,109,4357,0,10,12536,
+Times7953,134,4318,0,9,12415,
+Times7906,139,4311,0,19,12376,
+Times10143,129,4378,0,23,14674,

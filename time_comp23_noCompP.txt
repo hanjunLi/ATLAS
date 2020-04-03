@@ -1,0 +1,135 @@
+Running 0...
+Running 1...
+Running 2...
+key = partyID value = 1
+key = partiesNumber value = 3
+key = inputFile value = inputs.txt
+key = outputFile value = output.txt
+key = circuitFile value = comp_circuit2.txt
+key = fieldType value = Zp
+key = partiesFile value = Parties.txt
+key = internalIterationsNumber value = 10
+fieldType = Zp
+key = partyID value = 1
+key = partiesNumber value = 3
+key = inputFile value = inputs.txt
+key = outputFile value = output.txt
+key = circuitFile value = comp_circuit2.txt
+key = fieldType value = Zp
+key = partiesFile value = Parties.txt
+key = internalIterationsNumber value = 10
+key = partyID value = 0
+key = partiesNumber value = 3
+key = inputFile value = inputs.txt
+key = outputFile value = output.txt
+key = circuitFile value = comp_circuit2.txt
+key = fieldType value = Zp
+key = partiesFile value = Parties.txt
+key = internalIterationsNumber value = 10
+fieldType = Zp
+key = partyID value = 0
+key = partiesNumber value = 3
+key = inputFile value = inputs.txt
+key = outputFile value = output.txt
+key = circuitFile value = comp_circuit2.txt
+key = fieldType value = Zp
+key = partiesFile value = Parties.txt
+key = internalIterationsNumber value = 10
+# of inputs:3
+in communication
+num parties = 3
+my id = 0
+my port = 8000
+other port = 8200
+Failed to connect. sleeping for 500 milliseconds, connect: Connection refused
+key = partyID value = 2
+key = partiesNumber value = 3
+key = inputFile value = inputs.txt
+key = outputFile value = output.txt
+key = circuitFile value = comp_circuit2.txt
+key = fieldType value = Zp
+key = partiesFile value = Parties.txt
+key = internalIterationsNumber value = 10
+fieldType = Zp
+key = partyID value = 2
+key = partiesNumber value = 3
+key = inputFile value = inputs.txt
+key = outputFile value = output.txt
+key = circuitFile value = comp_circuit2.txt
+key = fieldType value = Zp
+key = partiesFile value = Parties.txt
+key = internalIterationsNumber value = 10
+# of inputs:3
+in communication
+num parties = 3
+my id = 1
+my port = 8200
+other port = 8000
+accepting...
+# of inputs:3
+in communication
+num parties = 3
+my id = 2
+my port = 8400
+other port = 8001
+Failed to connect. sleeping for 500 milliseconds, connect: Connection refused
+accepting...
+channel established
+my port = 8001
+other port = 8400
+accepting...
+channel established
+my port = 8201
+other port = 8401
+Failed to connect. sleeping for 500 milliseconds, connect: Connection refused
+accepting...
+channel established
+channel established
+my port = 8401
+other port = 8201
+accepting...
+accepting...
+channel established
+channel established
+Total time:7088
+Gates:10
+Ave time:70.88time in milliseconds for 10 runs: 7092
+Total time:7098
+Gates:10
+Ave time:70.98time in milliseconds for 10 runs: 7103
+Total time:7106
+Gates:10
+Ave time:71.06time in milliseconds for 10 runs: 7111
+end main
+Times510,2,114,0,8,635,
+Times522,6,153,0,9,692,
+Times546,1,162,0,9,719,
+Times542,3,155,0,9,712,
+Times522,27,165,0,13,728,
+Times541,2,162,0,14,721,
+Times545,7,162,0,10,726,
+Times543,7,178,0,8,739,
+Times527,3,182,0,10,723,
+Times539,4,150,0,8,703,
+end main
+Times506,9,114,0,12,643,
+Times504,19,152,0,13,692,
+Times529,14,162,0,13,719,
+Times540,2,154,0,13,712,
+Times534,11,165,0,19,731,
+Times519,18,162,0,18,719,
+Times543,4,162,0,14,725,
+Times546,1,178,0,12,738,
+Times524,3,182,0,13,724,
+Times530,10,150,0,11,703,
+end main
+Times507,0,114,0,0,623,
+Times520,16,153,0,1,691,
+Times556,1,161,0,2,721,
+Times551,2,154,0,2,710,
+Times556,1,164,0,1,725,
+Times547,9,161,0,1,720,
+Times560,3,164,0,1,729,
+Times559,2,177,0,1,741,
+Times526,12,181,0,1,722,
+Times551,1,150,0,2,706,
