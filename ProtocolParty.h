@@ -23,20 +23,23 @@
 #include "Interpolate.h"
 #include <cmath>
 
-#define flag_print false
+#define flag_print true
 #define flag_print_output false
 
 using namespace std;
 using namespace std::chrono;
 
+template<class FieldType> class CompareGate;
 
 template <class FieldType>
 class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 
-	private:
+	public:
 		// -- polynomial functionalities
 		Interpolate<FieldType> interp; // evaluate (O(n)), interpolate polynomials (O(n^2))
-
+		vector<FieldType> gateShareArr; // my share of each gate (1 share each)
+		int numOfCompareGates;
+	private:
 		// -- global const
 		int numThreads = 2;      // TODO: add as main arguments later
 		int _K = 4;              // interpolation degree <=> 'shrink' factor
@@ -51,13 +54,14 @@ class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 		Measurement *timer;
 		TemplateField<FieldType> *field; // used to call some field functions
 		ProtocolTimer *protocolTimer;
+		CompareGate<FieldType> *comper;
 		// N, T - number of parties, malicious
 		int N, T, keySize, verifyIterations, m_partyId, eleSize;
 		string s;                     // string of my_partyId
 		string inputsFile, outputFile;
 		ArithmeticCircuit circuit;
 		// M - number of gates
-		int M, numOfInputGates, numOfOutputGates, numOfMultGates, numOfCompareGates;
+		int M, numOfInputGates, numOfOutputGates, numOfMultGates;// numOfCompareGates;
 		vector<long> myInputs;
 		vector<shared_ptr<ProtocolPartyData>> parties;
 
@@ -73,22 +77,15 @@ class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 		HIM<FieldType> matrix_for_k;  // interpolate first k points to rest 2k-1 - k
 		VDM<FieldType> matrix_vand;
 		VDMTranspose<FieldType> matrix_vand_transpose;  
-		vector<vector<FieldType> > OrVector; //the share of coefficients of fan-in Or function
+		
 		// -- filled during offline-preparation phase
 		vector<FieldType> _singleSharesArray; // used as seed for AES PRG
 		int _singleSharesOffset = 0;          // next random share to use
 		vector<FieldType> _doubleSharesArray; // used for DN mult
 		int _doubleSharesOffset = 0;    // next random double share to use
-		vector<FieldType> gateShareArr; // my share of each gate (1 share each)
 		vector<FieldType> gateValueArr; // the value for my input and output
 		//shares of [a]_b and [a]_p, will be initialized in preparation phase
-		vector<FieldType> _bitSharesValue;
-		vector<vector<FieldType> > _bitSharesBits;
-		vector<FieldType> _PBits; //bit sharing of P TODO: NOT INITIALIZED
-		vector<FieldType> _HalfPBits; //bit sharing of P/2
-		int _bitShareOffset = 0;
-		FieldType _PRIME;
-		ZZ _ZZPRIME;
+		
 	public:
 		bool hasOffline() { return true; }
 		bool hasOnline() override { return true; }
@@ -112,7 +109,7 @@ class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 		int processNotMult();
 		int processMultiplications(int lastMultGate);
 		int processMultDN(int indexInRandomArray);
-		int processComp();
+		
 		void verificationPhase();
 		// compute vector products w/ DN Mult
 		void interpolatePolyVec(vector<FieldType>& aShares,
@@ -159,26 +156,8 @@ class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 		void openShare(int numOfRandomShares, vector<FieldType> &Shares,
 				vector<FieldType> &secrets);
 		FieldType randomCoin();
-		// Compgate functions
-		void getRandomBitShare(int num,vector<FieldType> &res, vector<vector<FieldType> > &bits);
-		//void genRandom01(int num,vector<vector<FieldType>> &bin,vector<FieldType> &val);
-		void compRandom(vector<TGate> &gate);
-		//void compRandom(vector<FieldType> &a, vector<FieldType> &b, vector<FieldType> &dest);
-		// given known element c and binary share a, store (c<a) to dest
-		void compGiven(vector<vector<FieldType> > &a, vector<FieldType> &c, vector<FieldType> &dest);
-		void compP(vector<vector<FieldType> > &a, vector<FieldType> &dest);
-		void compBits(vector<FieldType> &a, vector<FieldType> &b, FieldType &dest);
-		// compare the function (a < p/2)
-		void compHalfP(vector<FieldType> &a, vector<FieldType> &dest);
-		// compute square inverse of a given element
-		FieldType compSqrInverse(FieldType &a);
-		void compSingleMult(FieldType &a, FieldType &b, FieldType &dest);
-		//save the prefix or of array a to array res
-		void compPrefixOr(vector<vector<FieldType> > &a, vector<vector<FieldType> > &res);
-		void compFanInOr(int num, vector<vector<FieldType> > &a, vector<FieldType> &res);
-		int generateBitShares(int numOfBitShares);
-		void getRandomInvPairs(int num, vector<FieldType> &b, vector<FieldType> &invb, vector<FieldType> &tmpc);
-		void getBitDecomp(FieldType &e, vector<FieldType> &dest);
+		
+		int processComp();
 		// --  helper functions
 		void getRandomShares(int numOfRandoms,
 				vector<FieldType> &randomElementsToFill);
@@ -194,6 +173,44 @@ class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 		FieldType interpolate_to_zero(vector<FieldType> &x);
 };
 
+
+template<class FieldType>
+class CompareGate 
+{
+private:
+	ProtocolParty<FieldType> *helper;
+	int eleSize;
+	vector<vector<FieldType> > OrVector; //the share of coefficients of fan-in Or function
+	vector<FieldType> _bitSharesValue;
+	vector<vector<FieldType> > _bitSharesBits;
+	int _bitShareOffset = 0;
+public:
+	CompareGate(ProtocolParty<FieldType> *ptr,int siz);
+	~CompareGate();
+	
+// Compgate functions
+		void getRandomBitShare(int num,vector<FieldType> &res, vector<vector<FieldType> > &bits);
+		//void genRandom01(int num,vector<vector<FieldType>> &bin,vector<FieldType> &val);
+		void compRandom(vector<TGate> &gate);
+		//void compRandom(vector<FieldType> &a, vector<FieldType> &b, vector<FieldType> &dest);
+		// given known element c and binary share a, store (c<a) to dest
+		void compGiven(vector<vector<FieldType> > &a, vector<FieldType> &c, vector<FieldType> &dest);
+		void compGivenNoPrefixOr(vector<vector<FieldType> > &a, vector<FieldType> &c, vector<FieldType> &dest);
+		void computeAnswer(vector<vector<FieldType> > &b, vector<vector<FieldType> > &c,vector<FieldType> &res);
+		void compP(vector<vector<FieldType> > &a, vector<FieldType> &dest);
+		// compare the function (a < p/2)
+		void compHalfP(vector<FieldType> &a, vector<FieldType> &dest);
+		// compute square inverse of a given element
+		FieldType compSqrInverse(FieldType &a);
+		//save the prefix or of array a to array res
+		void compPrefixOr(vector<vector<FieldType> > &a, vector<vector<FieldType> > &res);
+		void compFanInOr(int num, vector<vector<FieldType> > &a, vector<FieldType> &res);
+		int generateBitShares(int numOfBitShares);
+		void getRandomInvPairs(int num, vector<FieldType> &b, vector<FieldType> &invb, vector<FieldType> &tmpc);
+		void getBitDecomp(FieldType &e, vector<FieldType> &dest);
+
+};
+
 	template <class FieldType>
 ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
 	: Protocol("MPCHonestMajorityNoTriples", argc, argv) {
@@ -207,7 +224,6 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
 		string fieldType = this->getParser().getValueByKey(arguments, "fieldType");
 		if (fieldType.compare("ZpMersenne31") == 0) {
 			this->field = new TemplateField<FieldType>(2147483647);
-			this->_PRIME = FieldType(2147483647);
 		} else if (fieldType.compare("ZpMersenne61") == 0) {
 			this->field = new TemplateField<FieldType>(0);
 		} else if (fieldType.compare("ZpKaratsuba") == 0) {
@@ -216,8 +232,6 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
 			this->field = new TemplateField<FieldType>(8);
 		} else if (fieldType.compare("Zp") == 0) {
 			this->field = new TemplateField<FieldType>(2147483647);
-			this->_PRIME = FieldType(2147483647);
-			this->_ZZPRIME = ZZ(2147483647);
 		}
 		//save the value of inversion of 2
 		//this->INV2 = this->field->inv(2);
@@ -1169,18 +1183,17 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
 		this->numOfMultGates + (nCompressions+1)*_K*2 + 100 * eleSize * this->numOfCompareGates;
 	_doubleSharesOffset = 0;
 	offlineDNForMultiplication(numDoubleShares);
-	_bitShareOffset=0;
-	int numBitShares = 3 * numOfCompareGates;
-	if(flag_print)
-		cout<<"generating bit shares"<<endl;
-	generateBitShares(numBitShares);
+	
 	if(flag_print)
 		cout << "generated doubles: " << numDoubleShares << endl;
 	//a brute force way for generating Or polys are applied.
 	//can be implemented in a more efficient way.
-	vector<FieldType> tmp,tmpnum;
-	int tot = eleSize * (N+2);
-	OrVector.resize(tot);
+	
+	//put it here to let bit share to be generated
+	this->comper = new CompareGate<FieldType>(this,eleSize);
+	//vector<FieldType> tmp,tmpnum;
+	//int tot = eleSize * (N+2);
+	/*OrVector.resize(tot);
 	tmp.resize(1);
 	tmpnum.resize(1);
 	tmp[0] = FieldType(0);
@@ -1198,118 +1211,14 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
 		if(flag_print)
 			for(int j=0; j<=i; j++)
 				cout<<OrVector[i][j]<<","<<endl;
-	}
+	}*/
 	return true;
 }
 
 //template <>
 //ZpMersenneIntElement ProtocolParty<ZpMersenneIntElement>::compSqrInverse(ZpMersenneIntElement &num)
 
-	template <class FieldType>
-FieldType ProtocolParty<FieldType>::compSqrInverse(FieldType &num)
-{
-}
-
-/*inline ZZ_p qpow(ZZ_p a,ZZ num)
-  {
-  if(num==0) return ZZ_p(1);
-  ZZ_p cur = qpow(a,num/2);
-  cur = cur * cur;
-  if(num % 2 ==1) cur = cur * a;
-  if(flag_print)
-  cout<<num<<","<<cur<<endl;
-  return cur;
-  }*/
-	template<>
-inline ZZ_p ProtocolParty<ZZ_p>::compSqrInverse(ZZ_p &num)
-{
-	//the mod is 2147483647
-	//we don't need to init ZZ (?)
-	//if(flag_print)
-	//	cout<<"Computing Sqr Inv of"<<num<<":"<<endl;;
-	ZZ md = _ZZPRIME; //rep(_PRIME);
-	//if(flag_print)
-	//	cout<<"Prime:"<<md<<endl;
-	ZZ tmp = (md+1)/4;
-	//if(flag_print)
-	//	cout<<"Times:"<<tmp<<endl;
-	ZZ_p x = power(num,tmp); //qpow(num,tmp); //power(num,tmp);
-	//if(flag_print)
-	//	cout<<"Res:"<<x<<endl<<"Check:"<<x * num<<endl;
-	return x;
-}
-
-//return value: succesfully generated shares
-	template <class FieldType>
-int ProtocolParty<FieldType>::generateBitShares(int num)
-{
-	int suc_cnt=0;
-	_bitShareOffset = 0;
-	//we pick out 4*required bits
-	int tot = 4 * eleSize * num;
-	vector<FieldType> tempShares,resShares,secrets;
-	_bitSharesValue.resize(tot);
-	getRandomShares(tot, tempShares);
-	//if(flag_print)
-	//	cout<<"Generating random shares, #"<<tot<<endl;
-	vector<FieldType> PlainText;
-	//if(flag_print)
-	//	openShare(tot,tempShares,PlainText);
-	//now do multiplications and rule out 0 shares
-	DNMultVec(tempShares,tempShares,resShares,1);
-	//if(flag_print)
-	//	cout<<"DNMult finished"<<endl;
-	openShare(tot,resShares,secrets);
-	/*if(flag_print)
-	  {
-	  cout<<"Share Opened in GenB(),"<<tot<<endl;
-	  cout<<secrets[0]<<","<<secrets[1]<<","<<secrets[2]<<","<<secrets[300]<<endl;
-	  }*/
-	//for each opened, check if is 0, if not we generate the share
-	for(int i=0; i<tot; i++)
-		if(secrets[i] != FieldType(0)) //valid
-		{
-			//if(flag_print)
-			//	cout<<"Trying to calc inv for "<<secrets[i]<<endl;
-			FieldType cur = compSqrInverse(secrets[i]);
-			//if(flag_print)
-			//	cout<<"find invs:"<<cur<<","<<PlainText[i]<<endl;
-			//cout<<"Inv2:"<<FieldType(1) / FieldType(2)<<endl;
-			cur = ( (FieldType(1) / FieldType(cur)) * tempShares[i]+ FieldType(1))/ FieldType(2);
-			//if(flag_print)
-			//	cout<<"found share:"<<cur<<endl;
-			/*if(flag_print)
-			  {
-			  vector<FieldType> tp(1),res;
-			  tp[0] = cur;
-			  openShare(1,tp,res);
-			  cout<<"Generated a "<<res[0]<<endl;
-			  }*/
-			_bitSharesValue[_bitShareOffset] = cur;
-			suc_cnt++;
-			_bitShareOffset++;
-			/*if(flag_print)
-			  {
-			  vector<FieldType> d0(1),d1;
-			  d0[0] = cur;
-			  openShare(1,d0,d1);
-			  cout<<"generate a bit "<<d1[0]<<endl;
-			  if(d1[0]!=FieldType(0) && d1[0]!=FieldType(1))
-			  {
-			  cout<<"invalid generated bit!"<<endl;
-			  abort();
-			  }
-			  }*/
-			//if(flag_print)
-			//	cout<<"Suc count:"<<suc_cnt<<endl;
-		}
-	//else if(flag_print)
-	//	cout<<i<<" failed"<<endl;
-	if(flag_print)
-		cout<<"Bit Generate done"<<endl;
-	_bitShareOffset = 0;
-	return suc_cnt;
-}
+	
 template <class FieldType>
 bool ProtocolParty<FieldType>::checkConsistency(vector<FieldType> &x, int d) {
 	if (d == T) {
@@ -1850,7 +1759,7 @@ template <class FieldType> void ProtocolParty<FieldType>::outputPhase() {
 						(counter * fieldByteSize));
 			}
 
-			if (flag_print_output)
+			if (flag_print)
 				cout << "the result for " << circuit.getGates()[k].input1
 					<< " is : " << field->elementToString(interpolate_to_zero(x1)) << '\n';
 			counter++;
@@ -2000,64 +1909,6 @@ void ProtocolParty<FieldType>::sendDataFromP1(vector<byte> &sendBuf, int first,
 	}
 }
 
-template <class FieldType> ProtocolParty<FieldType>::~ProtocolParty() {
-	protocolTimer->writeToFile();
-	delete protocolTimer;
-	delete field;
-	delete timer;
-	// delete comm;
-}
-
-//only generated for ZP_p class?
-//may occur error for ZPMersenneIntElement??
-//generate a single 0/1 random share
-//for safety, for each bit we consume 2 random shares
-/*
-   template <>
-   void ProtocolParty<ZZ_p>::genRandom01(int num,vector<ZZ_p> &dest)
-   {
-   dest.resize(num);
-   vector<ZZ_p> tmp(2*num),tmp2(2*num);
-//first take use of a random share
-getRandomShares(2*num,tmp2);
-static ZZ_p INV2 = ZZ_p(1073741824);
-//for each share we need to generate a 0,1
-//step 2: perform a multiplicationi
-//todo: need to add into verification phase
-//todo: what interface?
-//compareGateMult(2*num,tmp2)????
-//step3 : open a^2 mod p
-openShare(2*num,tmp2,tmp);
-//now the opened shares are stored in [tmp] array
-//pick out the non-0 shares
-int j=0;
-for(int i=0; i<2*num && j<num; i++)
-if(tmp[i]!=0) //valid share
-{
-cout<<"secret obtained:"<<tmp[i]<<endl;
-//compute sqrt(tmp[i])
-//for simplicity, require prime to be 4n+3
-//auto md = FieldType::modulus();
-ZZ md = ZZ(2147483647);
-cout<<md<<endl;
-//x = sqrt(a^2)
-ZZ_p x = power(tmp[i],(md+1)/4);
-if(rep(x)<md/2) x=-x;
-//y = inv(x)
-ZZ_p y = power(x,md-2);
-dest[j] = (y * tmp[i] + 1)*INV2;
-j++;
-}
-if(j<num)
-cerr<<"error generating 0/1 random!"<<endl;
-}
- */
-
-/*template<class FieldType>
-  void ProtocolParty<FieldType>::getRandomBitShare(int num,vector<vector<FieldType>> &bin,vector<FieldType> &val)
-  {
-  }*/
-// store (a<b) to dest, a and b are normal field elements
 
 	template<class FieldType>
 int ProtocolParty<FieldType>::processComp()
@@ -2075,20 +1926,153 @@ int ProtocolParty<FieldType>::processComp()
 			tmp.push_back(gate);
 		}
 	}
-	compRandom(tmp);
+	comper->compRandom(tmp);
+if(flag_print)
+	{
+		cout<<"compRandom ended"<<endl;
+		cout<<"Used single:"<<_singleSharesOffset<<"/"<<_singleSharesArray.size()<<","<<(double)_singleSharesOffset / _singleSharesArray.size()<<",left:"<<_singleSharesArray.size() - _singleSharesOffset << endl;
+		cout<<"Used double:"<<2 * _doubleSharesOffset<<"/"<<_doubleSharesArray.size()<<","<<(double)2*_doubleSharesOffset / _doubleSharesArray.size()<<",left:"<<-2*_doubleSharesOffset + _doubleSharesArray.size()<<endl;
+	}
 	return cnt;
 }
+
+template <class FieldType> ProtocolParty<FieldType>::~ProtocolParty() {
+	protocolTimer->writeToFile();
+	delete protocolTimer;
+	delete field;
+	delete timer;
+	// delete comm;
+}
+
+/////////////////////////////////////////////
+//START OF COMPAREGATE
+template<class FieldType>
+CompareGate<FieldType>::CompareGate(ProtocolParty<FieldType> *ptr,int siz)
+{
+	helper = ptr;
+	_bitShareOffset=0;
+	eleSize = siz;
+	int numBitShares = helper->numOfCompareGates;
+	if(flag_print)
+		cout<<"generating bit shares:"<<numBitShares<<endl;
+	generateBitShares(numBitShares);
+}
+
+template<class FieldType>
+CompareGate<FieldType>::~CompareGate()
+{
+}
+
+template <class FieldType>
+FieldType CompareGate<FieldType>::compSqrInverse(FieldType &num)
+{
+}
+
+	template<>
+inline ZZ_p CompareGate<ZZ_p>::compSqrInverse(ZZ_p &num)
+{
+	//the mod is 2147483647
+	//we don't need to init ZZ (?)
+	//if(flag_print)
+	//	cout<<"Computing Sqr Inv of"<<num<<":"<<endl;;ZZ md = _ZZPRIME; //rep(_PRIME);
+	ZZ md(2147483647); //rep(_PRIME);
+	//	cout<<"Prime:"<<md<<endl;
+	ZZ tmp = (md+1)/4;
+	//if(flag_print)
+	//	cout<<"Times:"<<tmp<<endl;
+	ZZ_p x = power(num,tmp); //qpow(num,tmp); //power(num,tmp);
+	//if(flag_print)
+	//	cout<<"Res:"<<x<<endl<<"Check:"<<x * num<<endl;
+	return x;
+}
+
+//return value: succesfully generated shares
+	template <class FieldType>
+int CompareGate<FieldType>::generateBitShares(int num)
+{
+	int suc_cnt=0;
+	_bitShareOffset = 0;
+	//we pick out 4*required bits
+	int tot = 4 * eleSize * num;
+	if(flag_print)
+		cout<<"Required #bitshare:"<<tot<<endl;
+	vector<FieldType> tempShares,resShares,secrets;
+	_bitSharesValue.resize(tot);
+	helper->getRandomShares(tot, tempShares);
+	//if(flag_print)
+	//	cout<<"Generating random shares, #"<<tot<<endl;
+	vector<FieldType> PlainText;
+	//if(flag_print)
+	//	helper->openShare(tot,tempShares,PlainText);
+	//now do multiplications and rule out 0 shares
+	helper->DNMultVec(tempShares,tempShares,resShares,1);
+	//if(flag_print)
+	//	cout<<"DNMult finished"<<endl;
+	helper->openShare(tot,resShares,secrets);
+	if(flag_print)
+	  {
+	  cout<<"Share Opened in GenB(),"<<tot<<endl;
+	  cout<<secrets[0]<<","<<secrets[1]<<endl;
+	  }
+	//for each opened, check if is 0, if not we generate the share
+	for(int i=0; i<tot; i++)
+		if(secrets[i] != FieldType(0)) //valid
+		{
+			//if(flag_print)
+			//	cout<<"Trying to calc inv for "<<secrets[i]<<endl;
+			FieldType cur = compSqrInverse(secrets[i]);
+			//if(flag_print)
+			//	cout<<"find invs:"<<cur<<","<<PlainText[i]<<endl;
+			//cout<<"Inv2:"<<FieldType(1) / FieldType(2)<<endl;
+			cur = ( (FieldType(1) / FieldType(cur)) * tempShares[i]+ FieldType(1))/ FieldType(2);
+			//if(flag_print)
+			//	cout<<"found share:"<<cur<<endl;
+			/*if(flag_print)
+			  {
+			  vector<FieldType> tp(1),res;
+			  tp[0] = cur;
+			  helper->openShare(1,tp,res);
+			  cout<<"Generated a "<<res[0]<<endl;
+			  }*/
+			_bitSharesValue[_bitShareOffset] = cur;
+			suc_cnt++;
+			_bitShareOffset++;
+			if(flag_print)
+			  {
+			  vector<FieldType> d0(1),d1;
+			  d0[0] = cur;
+			  helper->openShare(1,d0,d1);
+			  cout<<"generate a bit "<<d1[0]<<endl;
+			  if(d1[0]!=FieldType(0) && d1[0]!=FieldType(1))
+			  {
+			  cout<<"invalid generated bit!"<<endl;
+			  abort();
+			  }
+			  }
+			//if(flag_print)
+			//	cout<<"Suc count:"<<suc_cnt<<endl;
+		}
+	//else if(flag_print)
+	//	cout<<i<<" failed"<<endl;
+	if(flag_print)
+		cout<<"Bit Generate done"<<endl;
+	_bitShareOffset = 0;
+	return suc_cnt;
+}
+
 	template<class FieldType>
-void ProtocolParty<FieldType>::compRandom(vector<TGate> &gates)
+void CompareGate<FieldType>::compRandom(vector<TGate> &gates)
 {
 	//here a,b,c means the *share* [a],[b],[c] that are hold by this party
 	int cnt = gates.size();
+	if(flag_print)
+		cout<<"Entering compRandom with size "<<cnt<<endl;
 	vector<FieldType> a,b,c,w,x,y,tmp,tmp2,tmp3;
 	for(int l=0; l<cnt; l++)
 	{
 		auto gate = gates[l];
-		a.push_back(gateShareArr[gate.input1]);
-		b.push_back(gateShareArr[gate.input2]);
+		a.push_back(helper->gateShareArr[gate.input1]);
+		b.push_back(helper->gateShareArr[gate.input2]);
 		c.push_back(a[l] - b[l]);
 	}
 	//FieldType c = a - b;
@@ -2101,7 +2085,7 @@ void ProtocolParty<FieldType>::compRandom(vector<TGate> &gates)
 	  cout<<"checking input:"<<endl;
 	  vector<FieldType> d0(3),d1;
 	  d0[0] = a; d0[1] = b; d0[2]=c;
-	  openShare(3,d0,d1);
+	  helper->openShare(3,d0,d1);
 	  cout<<d1[0]<<","<<d1[1]<<","<<d1[2]<<endl;
 	  }*/
 	compHalfP(a,w);
@@ -2113,48 +2097,29 @@ void ProtocolParty<FieldType>::compRandom(vector<TGate> &gates)
 	  cout<<"checking compHalfP results:"<<endl;
 	  vector<FieldType> d0(3),d1;
 	  d0[0]=w; d0[1]=x; d0[2]=y;
-	  openShare(3,d0,d1);
+	  helper->openShare(3,d0,d1);
 	  cout<<d1[0]<<","<<d1[1]<<","<<d1[2]<<endl;
 	  }*/
 	//    cout<<"Exiting compHalf"<<endl;
 	//two innovations since we need to compute xy and w*(x+y-2xy)
 	//first round: compute xy
-	DNMultVec(x,y,tmp,1);
-	//compSingleMult(x,y,tmp);
+	helper->DNMultVec(x,y,tmp,1);
 	for(int l=0; l<cnt; l++)
 		tmp2.push_back(x[l] + y[l] - FieldType(2) * tmp[l]);
-	DNMultVec(w,tmp2,tmp3,1);
-	//compSingleMult(w,tmp2,tmp3);
+	helper->DNMultVec(w,tmp2,tmp3,1);
 	for(int l=0; l<cnt; l++)
 	{
 		auto gate = gates[l];
-		gateShareArr[gate.output] = tmp3[l] + FieldType(1) - y[l] - x[l] + tmp[l];
+		helper->gateShareArr[gate.output] = tmp3[l] + FieldType(1) - y[l] - x[l] + tmp[l];
 	}
-	if(flag_print)
-	{
-		cout<<"compRandom ended"<<endl;
-		cout<<"Used single:"<<_singleSharesOffset<<"/"<<_singleSharesArray.size()<<","<<(double)_singleSharesOffset / _singleSharesArray.size()<<",left:"<<_singleSharesArray.size() - _singleSharesOffset << endl;
-		cout<<"Used double:"<<2 * _doubleSharesOffset<<"/"<<_doubleSharesArray.size()<<","<<(double)2*_doubleSharesOffset / _doubleSharesArray.size()<<",left:"<<-2*_doubleSharesOffset + _doubleSharesArray.size()<<endl;
-	}
-}
-//compute single mult a * b
-	template<class FieldType>
-void ProtocolParty<FieldType>::compSingleMult(FieldType &a, FieldType &b, FieldType &dest)
-{
-
-	vector<FieldType> _a,_b,_c;
-	_a.resize(1); _a[0]=a;
-	_b.resize(1); _b[0]=b;
-	DNMultVec(_a,_b,_c,1);
-	dest = _c[0];
 }
 // given known element c and binary share a, store (c<a) to dest
 	template<class FieldType>
-void ProtocolParty<FieldType>::compGiven(vector<vector<FieldType> > &a, vector<FieldType> &c, vector<FieldType> &dest)
+void CompareGate<FieldType>::compGiven(vector<vector<FieldType> > &a, vector<FieldType> &c, vector<FieldType> &dest)
 {
 }
 	template<>
-inline void ProtocolParty<ZZ_p>::compGiven(vector<vector<ZZ_p> > &a, vector<ZZ_p> &c, vector<ZZ_p> &dest)
+inline void CompareGate<ZZ_p>::compGiven(vector<vector<ZZ_p> > &a, vector<ZZ_p> &c, vector<ZZ_p> &dest)
 {
 	if(a.size()!=c.size())
 	{
@@ -2166,20 +2131,7 @@ inline void ProtocolParty<ZZ_p>::compGiven(vector<vector<ZZ_p> > &a, vector<ZZ_p
 	if(flag_print)
 	  {
 	  cout<<"Entering compGiven"<<endl;
-	  }/*
-	  openShare(eleSize,a,d1);
-	  ZZ_p tmp(0);
-	  for(int i=0; i<eleSize; i++)
-	  {
-	  if(d1[i]!=0 && d1[i]!=1)
-	  {
-	  cout<<"Invalid bit in compGiven"<<endl;
-	  abort();
 	  }
-	  tmp = tmp * 2 + d1[i];
-	  }
-	  cout<<"comparing "<<c<<"<"<<tmp<<endl;
-	  }*/
 	vector<vector<ZZ_p> > cBits;
 	cBits.resize(tot);
 	for(int j=0; j<tot; j++)
@@ -2219,7 +2171,7 @@ inline void ProtocolParty<ZZ_p>::compGiven(vector<vector<ZZ_p> > &a, vector<ZZ_p
 	/*if(flag_print)
 	  {
 	  cout<<"Xor sum:"<<endl;
-	  openShare(eleSize,xorSum,d1);
+	  helper->openShare(eleSize,xorSum,d1);
 	  for(int i=0; i<eleSize; i++)
 	  cout<<d1[i]<<",";
 	  cout<<endl;
@@ -2232,7 +2184,7 @@ inline void ProtocolParty<ZZ_p>::compGiven(vector<vector<ZZ_p> > &a, vector<ZZ_p
 	/*if(flag_print)
 	  {
 	  cout<<"Exiting compGiven::prefixor"<<endl;
-	  openShare(eleSize,prefixOr,d1);
+	  helper->openShare(eleSize,prefixOr,d1);
 	  for(int i=0; i<eleSize; i++)
 	  cout<<d1[i]<<",";
 	  cout<<endl;
@@ -2257,7 +2209,7 @@ inline void ProtocolParty<ZZ_p>::compGiven(vector<vector<ZZ_p> > &a, vector<ZZ_p
 	  {
 	  vector<ZZ_p> d0(1),d1;
 	  d0[0]=dest;
-	  openShare(1,d0,d1);
+	  helper->openShare(1,d0,d1);
 	  if(d1[0]!=0 && d1[0]!=1)
 	  {
 	  cout<<"Invalid compGiven:"<<d1[0]<<endl;
@@ -2267,11 +2219,131 @@ inline void ProtocolParty<ZZ_p>::compGiven(vector<vector<ZZ_p> > &a, vector<ZZ_p
 	  }*/
 }
 	template<class FieldType>
-void ProtocolParty<FieldType>::compP(vector<vector<FieldType> > &a, vector<FieldType> &dest)
+void CompareGate<FieldType>::compGivenNoPrefixOr(vector<vector<FieldType> > &a, vector<FieldType> &c, vector<FieldType> &dest)
 {
 }
 	template<>
-inline void ProtocolParty<ZZ_p>::compP(vector<vector<ZZ_p> > &a, vector<ZZ_p> &dest)
+inline void CompareGate<ZZ_p>::compGivenNoPrefixOr(vector<vector<ZZ_p> > &x, vector<ZZ_p> &r, vector<ZZ_p> &dest)
+{
+	if(x.size()!=r.size())
+	{
+		cout<<"INVALID PARM for compGiven"<<endl;
+		abort();
+	}
+	vector<ZZ_p> d0,d1;
+	int tot = x.size();
+	if(flag_print)
+	  {
+	  cout<<"Entering compGiven"<<endl;
+	  }
+
+	vector<vector<ZZ_p> > rBits;
+	rBits.resize(tot);
+	for(int j=0; j<tot; j++)
+	{
+		ZZ tmp = rep(r[j]);
+		rBits[j].resize(eleSize);
+		for(int i=eleSize-1; i>=0; i--)
+		{
+			rBits[j][i] = tmp % 2;
+			tmp /=2;
+		}
+	}
+	if(flag_print)
+		cout<<"compGivenNew:step 1"<<endl;
+	//step 1: compute b and c
+	vector<vector<ZZ_p> > b,c;
+	b.resize(tot);
+	c.resize(tot);
+	for(int j=0; j<tot; j++)
+	{
+		b[j].resize(eleSize);
+		c[j].resize(eleSize);
+		for(int i=0; i<eleSize; i++)
+		{
+			b[j][i] = 1 - rBits[j][i] - x[j][i] + 2 * rBits[j][i] * x[j][i];
+			if(rBits[j][i] == 0) c[j][i] = x[j][i];
+			else c[j][i] = 0;
+		}
+	}
+	//step 2: compute r
+	computeAnswer(b,c,dest);
+}
+template<class FieldType>
+void CompareGate<FieldType>::computeAnswer(vector<vector<FieldType> > &b,vector<vector<FieldType> > &c, vector<FieldType> &res)
+//{
+//}
+//tempate<>
+//inline void CompareGate<ZZ_p>::computeAnswer(vector<vector<ZZ_p> > &b,vector<vector<ZZ_p> > &c, vector<ZZ_p> &res)
+{
+	//step 1: compute C and B (by dividing half)
+	int tot = b.size();
+	if(b.size()!=c.size())
+	{
+		cout<<"Invalid Param in compAnswer"<<endl;
+		abort();
+	}
+	if(flag_print)
+		cout<<"Entering compAnswer with "<<b.size()<<endl;
+	if(res.size()<b.size())
+		res.resize(b.size());
+	vector<FieldType> veca,vecb,vecres,tmpans;
+	int _cnt=0;
+	//all length should be even, since we have length 32 here
+	for(int l=0; l<tot; l++)
+	{
+		if(flag_print)
+			cout<<"No "<<l<<", length:"<<b[l].size()<<endl;
+		if(b[l].size()==1) //the answer is c_1
+			res[l] = c[l][0];
+		else if(b[l].size()>1)
+		{
+			for(int i=0; i<b[l].size(); i+=2)
+			{
+				veca.push_back(b[l][i]);
+				vecb.push_back(c[l][i+1]);
+				veca.push_back(b[l][i]);
+				vecb.push_back(b[l][i+1]);
+			}
+		}
+		else //size = 0 ?
+		{
+			cout<<"0-sized array detected!"<<endl;
+			abort();
+		}
+	}
+	helper->DNMultVec(veca,vecb,vecres,1);
+	//restore back to get B and C
+	vector<vector<ZZ_p> > B,C;
+	for(int l=0; l<tot; l++)
+		if(b[l].size()>1)
+		{
+			B.resize(B.size()+1);
+			C.resize(C.size()+1);
+			for(int i=0; i<b[l].size(); i+=2)
+			{
+				B[B.size()-1].push_back(vecres[_cnt+1]);
+				C[C.size()-1].push_back(vecres[_cnt] + c[l][i]);
+				_cnt+=2;
+			}
+		}
+	//call sub to get answer
+	if(B.size()>0)
+		computeAnswer(B,C,tmpans);
+	//restore answer
+	for(int l=0,_t=0; l<tot; l++)
+		if(b[l].size()>1)
+		{
+			res[l] = tmpans[_t];
+			_t++;
+		}
+}
+	template<class FieldType>
+void CompareGate<FieldType>::compP(vector<vector<FieldType> > &a, vector<FieldType> &dest)
+{
+}
+	template<>
+inline void CompareGate<ZZ_p>::compP(vector<vector<ZZ_p> > &a, vector<ZZ_p> &dest)
 {
 	if(flag_print)
 		cout<<"Entering compP"<<endl;
@@ -2310,7 +2382,7 @@ inline void ProtocolParty<ZZ_p>::compP(vector<vector<ZZ_p> > &a, vector<ZZ_p> &d
 	  {
 	  cout<<"Checking validation of prefixor"<<endl;
 	  vector<ZZ_p> tri;
-	  openShare(1,prefixOr[0],tri);
+	  helper->openShare(1,prefixOr[0],tri);
 	  cout<<"Passed"<<endl;
 	  }*/
 	E.resize(eleSize);
@@ -2329,7 +2401,7 @@ inline void ProtocolParty<ZZ_p>::compP(vector<vector<ZZ_p> > &a, vector<ZZ_p> &d
 	  cout<<"Checking dest"<<endl;
 	  vector<ZZ_p> t1(1),t2(1);
 	  t1[0] = dest;
-	  openShare(1,t1,t2);
+	  helper->openShare(1,t1,t2);
 	  if(t2[0]!=0 && t2[0]!=1)
 	  {
 	  cout<<"Invalid Comp:"<<t2[0]<<endl;
@@ -2341,19 +2413,16 @@ inline void ProtocolParty<ZZ_p>::compP(vector<vector<ZZ_p> > &a, vector<ZZ_p> &d
 }
 //compare bit sharing (a<b)
 // bits are given from MSB to LSB
-	template<class FieldType>
-void ProtocolParty<FieldType>::compBits(vector<FieldType> &a, vector<FieldType> &b, FieldType &dest)
-{
-}
+
 // compare the function (x < p/2)
 	template<class FieldType>
-void ProtocolParty<FieldType>::compHalfP(vector<FieldType> &x,vector<FieldType> &dest)
+void CompareGate<FieldType>::compHalfP(vector<FieldType> &x,vector<FieldType> &dest)
 {
 }
 
 //there are several pairs to be compared [ ? < p/2]
 	template<>
-inline void ProtocolParty<ZZ_p>::compHalfP(vector<ZZ_p> &X, vector<ZZ_p> &dest)
+inline void CompareGate<ZZ_p>::compHalfP(vector<ZZ_p> &X, vector<ZZ_p> &dest)
 {
 	if(flag_print)
 		cout<<"Now at compHalfP"<<endl;
@@ -2368,25 +2437,6 @@ inline void ProtocolParty<ZZ_p>::compHalfP(vector<ZZ_p> &X, vector<ZZ_p> &dest)
 	getRandomBitShare(tot,r,rBits);
 	if(flag_print)
 		cout<<"compHalfP::Successfully get shares"<<endl;
-	/*if(flag_print)
-	  {
-	  cout<<"compHalfP: checking consistency of generated shares"<<endl;
-	//vector<ZZ_p> tmp,t2;//(rBits[0].size());
-	//try to open and check
-	//cout<<rBits[0].size()<<","<<eleSize<<endl;
-	//openShare(rBits[0].size(),rBits[0],tmp);
-	//ZZ_p ww(0);
-	openShare(1,r,d0);
-	cout<<"value of r:"<<d0[0]<<endl;
-	//for(int i=0; i<eleSize; i++)
-	//	ww = ww * 2 + tmp[i];
-	//cout<<ww<<","<<t2[0]<<endl;
-	if(ww != t2[0])
-	{
-	cout<<"Invalid bit share"<<endl;
-	abort();
-	}
-	}*/
 	//step 2: compute [c] = [x] + [r], and reveal c
 	vector<ZZ_p> resvec,tmpvec;
 	for(int i=0; i<tot; i++)
@@ -2398,7 +2448,7 @@ inline void ProtocolParty<ZZ_p>::compHalfP(vector<ZZ_p> &X, vector<ZZ_p> &dest)
 		//resvec.resize(1); 
 		resvec[0]=res;*/
 	}
-	openShare(tot,resvec,tmpvec);
+	helper->openShare(tot,resvec,tmpvec);
 	if(flag_print)
 	  {
 	  cout<<"compHalfP::Successfully opened shares"<<endl;
@@ -2407,9 +2457,15 @@ inline void ProtocolParty<ZZ_p>::compHalfP(vector<ZZ_p> &X, vector<ZZ_p> &dest)
 	//c = tmpvec[0];
 	//step 3: compute [c <_b r]
 	vector<ZZ_p> comp_res;
-	compGiven(rBits,tmpvec,comp_res);
+	//compGiven(rBits,tmpvec,comp_res);
+	compGivenNoPrefixOr(rBits,tmpvec,comp_res);
 	if(flag_print)
 		cout<<"compGiven finished"<<endl;
+	if(comp_res.size()!=tot)
+	{
+		cout<<"Invalid compGiven length"<<endl;
+		abort();
+	}
 	//step 4: compute the overall result
 	vector<ZZ_p> rescr0;
 	for(int i=0; i<tot; i++)
@@ -2419,8 +2475,7 @@ inline void ProtocolParty<ZZ_p>::compHalfP(vector<ZZ_p> &X, vector<ZZ_p> &dest)
 		else rescr0.push_back(1 - rBits[0][this->eleSize-1]);
 	}
 	vector<ZZ_p> tmpres;
-	DNMultVec(rescr0,comp_res,tmpres,1);
-	//compSingleMult(rescr0,comp_res,tmpres);
+	helper->DNMultVec(rescr0,comp_res,tmpres,1);
 	if(flag_print)
 		cout<<"compHalfP::Single Mult finished"<<endl;
 
@@ -2432,23 +2487,22 @@ inline void ProtocolParty<ZZ_p>::compHalfP(vector<ZZ_p> &X, vector<ZZ_p> &dest)
 		dest[i] = 1 - (comp_res[i] + rescr0[i] - 2 * tmpres[i]);
 		//dest = 1 - dest;
 	}
-	/*if(flag_print)
+	if(flag_print)
 	  {
 	  cout<<"compHalfP, result checking:"<<endl;
-	  vector<ZZ_p> d0(1),d1;
-	  d0[0]=dest;
-	  openShare(1,d0,d1);
+	  vector<ZZ_p> d1;
+	  helper->openShare(tot,dest,d1);
 	  cout<<d1[0]<<endl;
 	  if(d1[0] != 0 && d1[0] != 1)
 	  {
 	  cout<<"Invalid CompHalfP Result"<<endl;
 	  abort();
 	  }
-	  }*/
+	  }
 
 }
 	template<class FieldType>
-void ProtocolParty<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,vector<vector<FieldType> > &bits)
+void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,vector<vector<FieldType> > &bits)
 {
 	if(flag_print)
 		cout<<"Now at GetRandomBit with "<<num<<endl;
@@ -2484,7 +2538,7 @@ void ProtocolParty<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,
 	  cout<<"Checking consistency of bit share"<<endl;
 	  vector<FieldType> r1(1),r2;
 	  r1[0]=res[suc];
-	  openShare(1,r1,r2);
+	  helper->openShare(1,r1,r2);
 	  cout<<"Check passed"<<endl;
 	  }
 	//TODO: should we consider multi-thread here?
@@ -2492,10 +2546,8 @@ void ProtocolParty<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,
 	//IF NO NEED TO COMPARE, JUST COMMENT THE FOLLOWING LINES BY /*
 	//if(flag_print)
 	//	cout<<"Exiting CompP"<<endl;
-	//compGiven(bits[suc],_PRIME,chk_suc);
-	//compBits(bits[suc],_PBits,chk_suc);
 	vector<FieldType> vc2;
-	openShare(num,chk_suc,vc2);*/
+	helper->openShare(num,chk_suc,vc2);*/
 	//TODO: can we use '=' like this?
 	//notice: compGiven gives [p < c], here we need to change direction
 	int tcnt=0;
@@ -2529,7 +2581,7 @@ void ProtocolParty<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,
 }
 
 	template<class FieldType>
-void ProtocolParty<FieldType>::compPrefixOr(vector<vector<FieldType> > &a, vector<vector<FieldType> > &res)
+void CompareGate<FieldType>::compPrefixOr(vector<vector<FieldType> > &a, vector<vector<FieldType> > &res)
 {
 	//for convenience we make a copy, as stated in the paper 
 	int _cnt = a.size();
@@ -2571,7 +2623,7 @@ void ProtocolParty<FieldType>::compPrefixOr(vector<vector<FieldType> > &a, vecto
 	  {
 	  cout<<"Checking 1st FanInOr"<<endl;
 	  vector<FieldType> t0;
-	  openShare(groupNum,X,t0);
+	  helper->openShare(groupNum,X,t0);
 	  for(int i=0; i<groupNum; i++)
 	  cout<<t0[i]<<",";
 	  cout<<"Passed"<<endl;
@@ -2596,7 +2648,7 @@ void ProtocolParty<FieldType>::compPrefixOr(vector<vector<FieldType> > &a, vecto
 	  {
 	  cout<<"Checking 2nd FaninOr"<<endl;
 	  vector<FieldType> t0;
-	  openShare(groupNum,Y,t0);
+	  helper->openShare(groupNum,Y,t0);
 	  for(int i=0; i<groupNum; i++)
 	  cout<<t0[i]<<",";
 	  cout<<"Passed"<<endl;
@@ -2628,8 +2680,8 @@ void ProtocolParty<FieldType>::compPrefixOr(vector<vector<FieldType> > &a, vecto
 		bas += groupNum[l];
 	}
 	if(flag_print)
-		cout<<"Entering DNMultVec after 2nd FaninOr"<<endl;
-	DNMultVec(tmpVec1,tmpVec2,G,1);
+		cout<<"Entering helper->DNMultVec after 2nd FaninOr"<<endl;
+	helper->DNMultVec(tmpVec1,tmpVec2,G,1);
 	bas = 0;
 	bastot = 0;
 	bassiz = 0;
@@ -2671,7 +2723,7 @@ void ProtocolParty<FieldType>::compPrefixOr(vector<vector<FieldType> > &a, vecto
 	  {
 	  cout<<"Checking 3rd FaninOr"<<endl;
 	  vector<FieldType> t0;
-	  openShare(groupSize,B,t0);
+	  helper->openShare(groupSize,B,t0);
 	  for(int i=0; i<groupSize; i++)
 	  cout<<t0[i]<<",";
 	  cout<<"Passed"<<endl;
@@ -2690,7 +2742,7 @@ void ProtocolParty<FieldType>::compPrefixOr(vector<vector<FieldType> > &a, vecto
 		bastot += tot[l];
 		bassiz += groupSize[l];
 	}
-	DNMultVec(tmpVec1,tmpVec2,S,1);
+	helper->DNMultVec(tmpVec1,tmpVec2,S,1);
 
 	bastot = 0;
 	bas = 0;
@@ -2711,7 +2763,7 @@ void ProtocolParty<FieldType>::compPrefixOr(vector<vector<FieldType> > &a, vecto
 	}
 }
 	template<class FieldType>
-void ProtocolParty<FieldType>::compFanInOr(int num,vector<vector<FieldType> >&a, vector<FieldType> &res)
+void CompareGate<FieldType>::compFanInOr(int num,vector<vector<FieldType> >&a, vector<FieldType> &res)
 {
 	if(num!=a.size())
 	{
@@ -2737,13 +2789,13 @@ void ProtocolParty<FieldType>::compFanInOr(int num,vector<vector<FieldType> >&a,
 	  for(int i=0; i<num; i++)
 	  {
 	  cout<<i<<":"<<endl;
-	  openShare(a[i].size(),a[i],debug0);
+	  helper->openShare(a[i].size(),a[i],debug0);
 	  for(int j=0; j<a[i].size(); j++)
 	  cout<<debug0[j]<<",";
 	  cout<<endl;
 	  }
 	  cout<<"checking A"<<endl;
-	  openShare(num,A,debug0);
+	  helper->openShare(num,A,debug0);
 	  for(int i=0; i<num; i++)
 	  cout<<debug0[i]<<",";
 	  cout<<endl;
@@ -2768,11 +2820,11 @@ void ProtocolParty<FieldType>::compFanInOr(int num,vector<vector<FieldType> >&a,
 			Avec[cnt] = A[i];
 	}
 	//if(flag_print)
-	//	cout<<"DNMultVec"<<endl;
-	DNMultVec(Avec,tmpc,C,1);
+	//	cout<<"helper->DNMultVec"<<endl;
+	helper->DNMultVec(Avec,tmpc,C,1);
 	//if(flag_print)
-	//	cout<<"fanInOr:OpenShare(C):"<<C.size()<<endl;
-	openShare(tot,C,Cres);
+	//	cout<<"fanInOr:helper->openShare(C):"<<C.size()<<endl;
+	helper->openShare(tot,C,Cres);
 	//if(flag_print)
 	//	cout<<"Share(C) opened"<<endl;
 	//step 4: retrieve the polynomials and do calculations
@@ -2800,7 +2852,7 @@ void ProtocolParty<FieldType>::compFanInOr(int num,vector<vector<FieldType> >&a,
 			}
 			//if(flag_print)
 			//	cout<<"Ready for Interpolate"<<endl;
-			interp.interpolate(tmpnum, tmp, OrVector[a[i].size()]);
+			helper->interp.interpolate(tmpnum, tmp, OrVector[a[i].size()]);
 			/*if(flag_print)
 			  {
 			  for(int j=0; j<a[i].size()+1; j++)
@@ -2823,7 +2875,7 @@ void ProtocolParty<FieldType>::compFanInOr(int num,vector<vector<FieldType> >&a,
 			  {
 			  debug0.resize(1);
 			  debug0[0]=Cprod * b[cnt];
-			  openShare(1,debug0,debug1);
+			  helper->openShare(1,debug0,debug1);
 			  cout<<"value of A^"<<j+1<<":"<< debug1[0]<<endl;
 			  }*/
 			res[i] = res[i] + OrVector[a[i].size()][j+1] * Cprod * b[cnt];
@@ -2833,7 +2885,7 @@ void ProtocolParty<FieldType>::compFanInOr(int num,vector<vector<FieldType> >&a,
 		  cout<<"Checking res array "<<i<<endl;
 		  vector<FieldType> t0(1),t1;
 		  t0[0]=res[i];
-		  openShare(1,t0,t1);
+		  helper->openShare(1,t0,t1);
 		  if(t1[0]!=0 && t1[0]!=1)
 		  {
 		  cout<<"Invalid FanInOr value"<<endl;
@@ -2846,7 +2898,7 @@ void ProtocolParty<FieldType>::compFanInOr(int num,vector<vector<FieldType> >&a,
 		cout<<"Gen Inv finished"<<endl;
 }
 	template<class FieldType>
-void ProtocolParty<FieldType>::getRandomInvPairs(int num, vector<FieldType> &b, vector<FieldType> &invb, vector<FieldType> &ctmp)
+void CompareGate<FieldType>::getRandomInvPairs(int num, vector<FieldType> &b, vector<FieldType> &invb, vector<FieldType> &ctmp)
 {
 	if(flag_print)
 		cout<<"Entering genInv:"<<num;
@@ -2855,8 +2907,8 @@ void ProtocolParty<FieldType>::getRandomInvPairs(int num, vector<FieldType> &b, 
 	b.resize(2*num-1);
 	if(flag_print)
 		cout<<b.size()<<" "<<bp.size();
-	getRandomShares(num,b);
-	getRandomShares(num,bp);
+	helper->getRandomShares(num,b);
+	helper->getRandomShares(num,bp);
 	if(flag_print)
 		cout<<b.size()<<" "<<bp.size();
 	for(int i=num; i<2*num-1; i++)
@@ -2866,10 +2918,10 @@ void ProtocolParty<FieldType>::getRandomInvPairs(int num, vector<FieldType> &b, 
 	}
 	if(flag_print)
 		cout<<"genInv:DNMult,size:"<<bp.size()<<","<<b.size()<<endl;
-	DNMultVec(b,bp,B,1);
+	helper->DNMultVec(b,bp,B,1);
 	if(flag_print)
-		cout<<"genInv:openShare,size:"<<B.size()<<endl;
-	openShare(2*num-1,B,Bres);
+		cout<<"genInv:helper->openShare,size:"<<B.size()<<endl;
+	helper->openShare(2*num-1,B,Bres);
 	if(flag_print)
 		cout<<"genInv:DNMult finished"<<endl;
 	invb.resize(num);
@@ -2880,8 +2932,8 @@ void ProtocolParty<FieldType>::getRandomInvPairs(int num, vector<FieldType> &b, 
 	if(flag_print)
 	{
 		cout<<"genInv:validating"<<endl;
-		openShare(num,invb,tr);
-		openShare(num,b,tr2);
+		helper->openShare(num,invb,tr);
+		helper->openShare(num,b,tr2);
 		for(int i=0; i<num; i++)
 			if(tr[i] * tr2[i] != FieldType(1))
 				cout<<"Not inv for "<<tr[i]<<" and "<<tr2[i]<<endl;
@@ -2895,7 +2947,7 @@ void ProtocolParty<FieldType>::getRandomInvPairs(int num, vector<FieldType> &b, 
 	{
 		vector<ZZ_p> ttr;
 		cout<<"cTmp:validating"<<endl;
-		openShare(num,ctmp,ttr);
+		helper->openShare(num,ctmp,ttr);
 		for(int i=1; i<num; i++)
 			if(ttr[i] != tr2[i-1] * tr[i])
 				cout<<"Not CTEMP for "<<tr2[i-1]<<" and "<<tr[i]<<endl;
@@ -2904,12 +2956,12 @@ void ProtocolParty<FieldType>::getRandomInvPairs(int num, vector<FieldType> &b, 
 }
 
 	template<class FieldType>
-void ProtocolParty<FieldType>::getBitDecomp(FieldType &a, vector<FieldType> &dest)
+void CompareGate<FieldType>::getBitDecomp(FieldType &a, vector<FieldType> &dest)
 {
 }
 
 	template<>
-inline void ProtocolParty<ZZ_p>::getBitDecomp(ZZ_p &a, vector<ZZ_p> &dest)
+inline void CompareGate<ZZ_p>::getBitDecomp(ZZ_p &a, vector<ZZ_p> &dest)
 {
 	/*	//step 1: generate bit
 		vector<ZZ_p> rBits,tmp,Ctmp,Cres;
@@ -2921,7 +2973,7 @@ inline void ProtocolParty<ZZ_p>::getBitDecomp(ZZ_p &a, vector<ZZ_p> &dest)
 	//step 2: reveal c
 	c = a-r;
 	Ctmp[0]=c;
-	openShare(1,Ctmp,Cres);
+	helper->openShare(1,Ctmp,Cres);
 	c = Cres[0];
 	if(c==0)
 	{
@@ -2937,4 +2989,6 @@ inline void ProtocolParty<ZZ_p>::getBitDecomp(ZZ_p &a, vector<ZZ_p> &dest)
 	//step 4: restore bit decomp of g = 2^l + c - qp
 	vector<ZZ_p> f1Bits,f2Bits,gBits;*/
 }
+
+
 #endif /* PROTOCOLPARTY_H_ */
