@@ -648,7 +648,7 @@ void ProtocolParty<FieldType>::computationPhase(int segStart, int segEnd) {
   auto firstGreater = upper_bound(layers.begin(), layers.end(), segStart);
 
   int layerStart = segStart;
-  for (auto iter = firstGreater; *iter < segEnd; iter++) {
+  for (auto iter = firstGreater; iter != layers.end() && *iter < segEnd; iter++) {
     int layerEnd = *iter;
     int nMults = processNonMult(layerStart, layerEnd);
     if (nMults > 0) {
