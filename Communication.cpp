@@ -20,10 +20,10 @@ reset(int N, int myId, int numThreads, string partiesFile, Dispute* disp_pt) {
 };
 
 void Communication::
-kingToT(vector<byte> &myShare, vector<vector<byte>> &sendBufs) {
+kingToT(int king, vector<byte> &myShare, vector<vector<byte>> &sendBufs) {
   // NOTE: no relay needed
   vector<bool> TVec;
-  int king = _disp_pt->tMask(TVec);
+  _disp_pt->tMaskP(king, TVec);
   int recSize = myShare.size();
   if (!TVec[_myId]) {           // non-T party gets zeros
     myShare.clear();
@@ -48,12 +48,12 @@ kingToT(vector<byte> &myShare, vector<vector<byte>> &sendBufs) {
 }
 
 void Communication::
-TToKing(vector<byte> &myShare, vector<vector<byte>> &recBufs) {
+TToKing(int king, vector<byte> &myShare, vector<vector<byte>> &recBufs) {
   // NOTE: no relay needed
   vector<bool> TMask;
-  int king = _disp_pt->tMask(TMask);
+  _disp_pt->tMask(TMask);
   int sendSize = myShare.size();
-  if (!TMask[_myId]) {           // non-T party sends zeros
+  if (!TMask[_myId]) {          // non-T party sends zeros
     return;
   } else if (_myId != king) {   // T party sends
     int kIdx = getChannelIdx(king);
@@ -76,17 +76,40 @@ TToKing(vector<byte> &myShare, vector<vector<byte>> &recBufs) {
 }
 
 void Communication::
-allToAll(vector<vector<byte>> &sendBufs, vector<vector<byte>> &recBufs) {
+allToT(vector<vector<byte>> &sendBufs, vector<vector<byte>> &recBufs) {
+  // no relay
   for (int i = 0; i < _N; i++) {
     assert(sendBufs[i].size() == sendBufs[0].size());
     assert(sendBufs[i].size() == recBufs[i].size());
   }
-  if (_disp_pt->hasDisp()) {        // do relay
+  recBufs[_myId] = sendBufs[_myId];
+  vector<bool> readMask, writeMask;
+  _disp_pt->tMaskP(_myId, writeMask); // write to my TSet
+  _disp_pt->tMaskPRev(_myId, readMask); // read from all whose TSet include me
+  vector<thread> threads(_nCommThreads);
+  for (int t = 0; t < _nCommThreads; t++) {
+    threads[t] =
+      thread(&Communication::rwWorker, this,
+             ref(sendBufs), ref(recBufs), ref(readMask), ref(writeMask), t);
+  }
+  rwWorker(sendBufs, recBufs, readMask, writeMask, _nCommThreads);
+  for (int t = 0; t < _nCommThreads; t++) {
+    threads[t].join();
+  }
+}
+
+void Communication::
+allToAll(vector<vector<byte>> &sendBufs, vector<vector<byte>> &recBufs, bool relay) {
+  for (int i = 0; i < _N; i++) {
+    assert(sendBufs[i].size() == sendBufs[0].size());
+    assert(sendBufs[i].size() == recBufs[i].size());
+  }
+  if (relay && _disp_pt->hasDisp()) {        // do relay
     allToAllRelay(sendBufs, recBufs);
   }
   
   // direct send to myself
-  recBufs[_myId] = move(sendBufs[_myId]);
+  recBufs[_myId] = sendBufs[_myId];
   vector<bool> myMask;
   _disp_pt->nonDispMask(_myId, myMask);
   vector<thread> threads(_nCommThreads);
@@ -102,14 +125,14 @@ allToAll(vector<vector<byte>> &sendBufs, vector<vector<byte>> &recBufs) {
 }
 
 void Communication::
-allToOne(vector<byte> &myShare, vector<vector<byte>> &recBufs, int king) {
+allToOne(vector<byte> &myShare, vector<vector<byte>> &recBufs, int king, bool relay) {
   int sendSize = myShare.size();
   if (_myId == king) {
     recBufs.clear();
     recBufs.resize(_N, vector<byte>(sendSize, 0));
   }
   
-  if (_disp_pt->hasDisp(king)) {    // do relay
+  if (relay && _disp_pt->hasDisp(king)) {    // do relay
     vector<int> relay;
     vector<bool> relayerMask;
     vector<vector<int>> relayerLoad;
@@ -144,9 +167,9 @@ allToOne(vector<byte> &myShare, vector<vector<byte>> &recBufs, int king) {
 }
 
 void Communication::
-oneToAll(vector<byte> &myShare, vector<vector<byte>> &sendBufs, int king) {
+oneToAll(vector<byte> &myShare, vector<vector<byte>> &sendBufs, int king, bool relay) {
   int recSize = myShare.size();
-  if (_disp_pt->hasDisp(king)) {    // do relay
+  if (relay && _disp_pt->hasDisp(king)) {    // do relay
     vector<int> relay;
     vector<bool> relayerMask;
     vector<vector<int>> relayerLoad;

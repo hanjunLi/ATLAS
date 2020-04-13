@@ -36,12 +36,13 @@ public:
   void reset(int N, int myId, int numThreads,
              string partiesFile, Dispute* disp_pt);
   // w/o relay round functions
-  void kingToT(vector<byte> &myShare, vector<vector<byte>> &recBufs);
-  void TToKing(vector<byte> &myShare, vector<vector<byte>> &recBufs);
+  void kingToT(int king, vector<byte> &myShare, vector<vector<byte>> &sendBufs);
+  void TToKing(int king, vector<byte> &myShare, vector<vector<byte>> &recBufs);
+  void allToT(vector<vector<byte>> &sendBufs, vector<vector<byte>> &recBufs);
   // w/ relay round functions
-  void allToAll(vector<vector<byte>> &sendBufs, vector<vector<byte>> &recBufs);
-  void allToOne(vector<byte> &myShare, vector<vector<byte>> &recBufs, int king);
-  void oneToAll(vector<byte> &myShare, vector<vector<byte>> &sendBufs, int king);
+  void allToAll(vector<vector<byte>> &sendBufs, vector<vector<byte>> &recBufs, bool relay = true);
+  void allToOne(vector<byte> &myShare, vector<vector<byte>> &recBufs, int king, bool relay = true);
+  void oneToAll(vector<byte> &myShare, vector<vector<byte>> &sendBufs, int king, bool relay = true);
   // relayee helpers
   void recFromRelay(vector<vector<byte>>& recBufs, vector<bool>& relayerMask,
                     vector<vector<int>>& relayerLoad, int sendSize);

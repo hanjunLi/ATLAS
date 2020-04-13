@@ -56,7 +56,6 @@ void Dispute::addCorrParty(int p) {
   }
 }
 
-// TODO: add multiple / all kings version
 // TODO: remember for repeated use
 int Dispute::tSet(vector<int> &TSet) {
   int king = 0;
@@ -93,13 +92,35 @@ int Dispute::nonTSet(vector<int> &NonTSet) {
   return king;
 }
 
-int Dispute::tAndNonTSet(vector<int> &TSet,
-                         vector<int>& NonTSet) {
+int Dispute::tAndNonTSet(vector<int> &TSet, vector<int>& NonTSet) {
   int king = tSet(TSet);
   nonTSet(NonTSet);
   return king;  
 
 }
+
+void Dispute::tAndNonTSetP(int p, vector<int>& TSet, vector<int>& NonTSet) {
+  assert(!_corr[p]);
+  vector<int> NonDispSet;
+  int nDisp = dispAndNonDispSet(p, NonTSet, NonDispSet);
+  TSet.resize(_T+1);
+  TSet[0] = p;
+  NonTSet.resize(_N - _T - 1);
+  int tCount = 1;
+  int nonTCount = nDisp;
+  for (int i=0; i<_N-nDisp; i++) {
+    int curId = NonDispSet[i];
+    if (curId == p) {
+      continue;
+    }
+    if (tCount < _T+1) {
+      TSet[tCount++] = curId;
+    } else {
+      NonTSet[nonTCount++] = curId;
+    }
+  }
+}
+
 
 int Dispute::tMask(vector<bool> &TMask) {
   TMask.clear();
@@ -110,6 +131,37 @@ int Dispute::tMask(vector<bool> &TMask) {
     TMask[t] = true;
   }
   return king;
+}
+
+void Dispute::tMaskP(int p, vector<bool> &TMask) {
+  TMask.clear();
+  TMask.resize(_N, false);
+  if (_corr[p]) {
+    return;
+  }
+  vector<int> TSetP, tmp;
+  tAndNonTSetP(p, TSetP, tmp);
+  for (int i : TSetP) {
+    TMask[i] = true;
+  }
+}
+
+// TODO: use memory and optimize
+void Dispute::tMaskPRev(int p, vector<bool> &TMaskRev) {
+  TMaskRev.clear();
+  TMaskRev.resize(_N, false);
+  if (_corr[p]) {
+    return;
+  }
+  TMaskRev[p] = true;
+  vector<bool> TMaskI;
+  for (int i=0; i<_N; i++) {
+    if ( i == p || _disp[p][i]) {
+      continue;                 // not in TSet of disp parties
+    }
+    tMaskP(i, TMaskI);
+    TMaskRev[i] = TMaskI[p];
+  }
 }
 
 // TODO: remember for repeated use
