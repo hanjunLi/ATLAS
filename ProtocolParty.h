@@ -52,7 +52,7 @@ private:
   Communication _comm;
   Dispute _disp;
   vector<PrgFromOpenSSLAES> _prgs;
-  HIM<FieldType> _mat_to_T, _mat_n_to_n;;
+  HIM<FieldType> _mat_to_T, _mat_T_to_n;;
   FieldType _zero;
   int _fieldByteSize;
   vector<vector<bool>> _TMasks;
@@ -92,6 +92,7 @@ private:
   vector<FieldType> gateShareArr; // my share of each gate (1 share each)
   vector<FieldType> gateValueArr; // the value for my input and output
 
+  __inline__
   void intToElements(vector<int>& intVec, vector<FieldType>& elemVec) {
     int nInts = intVec.size();
     elemVec.resize(nInts);
@@ -99,7 +100,8 @@ private:
       elemVec[i] = _field->GetElement(intVec[i]+1);
     }
   }
-  
+
+  __inline__
   void matForRefresh(int pid, HIM<FieldType>& mat_to_T) {
     vector<int> TSet, NonTSet;
     _disp.tAndNonTSetP(pid, TSet, NonTSet);
@@ -112,7 +114,8 @@ private:
     mat_to_T.allocate(_T+1, _N - _T, _field);
     mat_to_T.InitHIMVectorAndsizes(alpha_nonT, _N - _T, _T+1);
   }
-  
+
+  __inline__
   FieldType prgForP(int pid) {
     vector<byte> prgBytes(_fieldByteSize);
     _prgs[pid].getPRGBytes(prgBytes, 0, _fieldByteSize);
@@ -120,6 +123,23 @@ private:
   }
 
 
+  __inline__
+  void make2TShares(int nShares, vector<FieldType>& secrets,
+                    vector<vector<FieldType>>& fullSharesVec) {
+    secrets.resize(nShares);
+    fullSharesVec.clear();
+    fullSharesVec.resize(_N ,vector<FieldType>(nShares));
+    vector<FieldType> doubleShares(_N);
+    for (int i=0; i<nShares; i++) {
+      for (int j=0; j<_N; j++) {
+        doubleShares[j] = prgForP(j);
+        fullSharesVec[j][i] = doubleShares[j]; 
+      }
+      secrets[i] = interpolate_to_zero(doubleShares);
+    }
+  }
+
+  __inline__
   void make2TSharesPrg(int nShares, vector<FieldType>& secrets,
                        vector<vector<FieldType>>& fullSharesVec,
                        vector<vector<FieldType>>& prgRecShares) {
@@ -140,22 +160,7 @@ private:
     }
   }
   
-  void make2TShares(int nShares, vector<FieldType>& secrets,
-                    vector<vector<FieldType>>& fullSharesVec) {
-    secrets.resize(nShares);
-    fullSharesVec.clear();
-    fullSharesVec.resize(_N ,vector<FieldType>(nShares));
-    vector<FieldType> doubleShares(_N);
-    for (int i=0; i<nShares; i++) {
-      for (int j=0; j<_N; j++) {  // vvv disp shares = 0
-        doubleShares[j] = prgForP(j);
-        fullSharesVec[j][i] = doubleShares[j]; 
-      }
-      secrets[i] = interpolate_to_zero(doubleShares);
-    }
-  }
-  
-  
+  __inline__
   void makeTShares(vector<FieldType>& secrets, vector<vector<FieldType>>& fullSharesVec) {
     int nShares = secrets.size();
     fullSharesVec.clear();
@@ -200,8 +205,8 @@ private:
       }
     }
   }
-  
-  
+
+
 public:
   bool hasOffline() { return true; }
   bool hasOnline() override { return true; }
@@ -259,7 +264,6 @@ public:
   void outputPhase();
   
   // -- secret sharing functionalities
-  void batchConsistencyCheckOfShares(const vector<FieldType> &inputShares);
   void openShare(int numOfRandomShares, vector<FieldType> &Shares,
                  vector<FieldType> &secrets);
   FieldType randomCoin();
@@ -267,12 +271,7 @@ public:
   // --  helper functions
   void getRandomShares(int numOfRandoms,
                        vector<FieldType> &randomElementsToFill);
-  void getRandomSharesWithCheck(int numOfRnadoms,
-                                vector<FieldType> &randomElementsToFill);
   vector<byte> generateCommonKey();
-  void generatePseudoRandomElements(vector<byte> &aesKey,
-                                    vector<FieldType> &randomElementsToFill,
-                                    int numOfRandomElements);
   bool checkConsistency(vector<FieldType> &x, int d);
   // locally interpolate received sharing
   FieldType reconstructShare(vector<FieldType> &x, int d);
@@ -296,7 +295,9 @@ makeRandShares(int nRands, vector<FieldType> &randShares) {
   
   vector<vector<byte>> sendBufs(_N, vector<byte>(nBuckets*_fieldByteSize));
   for (int i=0; i<_N; i++) {
-    _field->elementVectorToByteVector(randSharesAll[i], sendBufs[i]);
+    if (_TMasks[_myId][i]) {
+      _field->elementVectorToByteVector(randSharesAll[i], sendBufs[i]);
+    }
   }
   vector<vector<byte>> recBufs(_N, vector<byte>(nBuckets*_fieldByteSize, 0));
   _comm.allToT(sendBufs, recBufs);
@@ -322,9 +323,10 @@ makeRandShares(int nRands, vector<FieldType> &randShares) {
 template <class FieldType>
 void ProtocolParty<FieldType>::
 makeRandDoubleShares(int nRands, vector<FieldType> &randSharePairs, vector<int>& kingIds) {
-  int nBuckets = (nRands / _N) + 1;
-  randSharePairs.resize(nBuckets * _N * 2);
-  kingIds.resize(nBuckets * _N);
+  int nExpands = (nRands + _N -1 ) / _N;
+  int nBuckets = (nExpands * _T + _T) / (_T+1);
+  randSharePairs.resize(nExpands * _N * 2);
+  kingIds.resize(nExpands * _N);
 
   vector<FieldType> secrets;
   vector<vector<FieldType>> dSharesAll, sharesAll,
@@ -332,32 +334,49 @@ makeRandDoubleShares(int nRands, vector<FieldType> &randSharePairs, vector<int>&
     prgRecShares2T(_N, vector<FieldType>(nBuckets, _zero));
   make2TSharesPrg(nBuckets, secrets, dSharesAll, prgRecShares2T);
   makeTSharesPrg(secrets, sharesAll, prgRecShares);
-  // mix single and double shares
   vector<vector<byte>> sendBufs(_N, vector<byte>(nBuckets*_fieldByteSize));
   for (int i=0; i<_N; i++) {
-    _field->elementVectorToByteVector(sharesAll[i], sendBufs[i]);
+    if (_TMasks[_myId][i]) {
+      _field->elementVectorToByteVector(sharesAll[i], sendBufs[i]);
+    }
   }
   vector<vector<byte>> recBufs(_N, vector<byte>(nBuckets*_fieldByteSize, 0));
   _comm.allToT(sendBufs, recBufs);
   int count = 0;
-  vector<FieldType> bufferIn(_N), bufferIn2(_N), bufferOut(_N), bufferOut2(_N);
+  vector<FieldType> bufferIn(_N), bufferIn2(_N), bufferOut(_N), bufferOut2(_N),
+    toExpand(nBuckets*(_T+1)), toExpand2(nBuckets*(_T+1));
   for (int i=0; i<nBuckets; i++) {
     for (int j=0; j<_N; j++) {
       if (_TMasks[j][_myId]) {
         bufferIn[j] =
-          _field->bytesToElement(recBufs[j].data() + i*_fieldByteSize);
+            _field->bytesToElement(recBufs[j].data() + i * _fieldByteSize);
       } else {
         bufferIn[j] = prgRecShares[j][i];
       }
       bufferIn2[j] = prgRecShares2T[j][i];
     }
-    _mat_n_to_n.MatrixMult(bufferIn, bufferOut);
-    _mat_n_to_n.MatrixMult(bufferIn2, bufferOut2);
+    matrix_vand_transpose.MatrixMult(bufferIn, bufferOut, _N - _T);
+    matrix_vand_transpose.MatrixMult(bufferIn2, bufferOut2, _N - _T);
+    for (int j=0; j<_N-_T; j++) {
+      toExpand[count] = bufferOut[j];
+      toExpand2[count] = bufferOut2[j];
+      count++;
+    }
+  }
+  count = 0;
+  bufferIn.resize(_T);
+  bufferIn2.resize(_T);
+  for (int i=0; i<nExpands; i++) {
+    for (int j=0; j<_T; j++) {
+      bufferIn[j] = toExpand[i*_T+j];
+      bufferIn2[j] = toExpand2[i*_T+j];
+    }
+    _mat_T_to_n.MatrixMult(bufferIn, bufferOut);
+    _mat_T_to_n.MatrixMult(bufferIn2, bufferOut2);
     for (int j=0; j<_N; j++) {
       randSharePairs[count*2] = bufferOut[j];
       randSharePairs[count*2+1] = bufferOut2[j];
-      kingIds[count] = j;
-      count++;
+      kingIds[count++] = j;
     }
   }
 }
@@ -387,7 +406,6 @@ void ProtocolParty<FieldType>::setUpSeeds() {
     _prgs[i].setKey(curKey);
   }
 }
-
 
 template <class FieldType>
 ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
@@ -775,9 +793,9 @@ verifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
   // -- append random shares vec(a)_N, vec(b)_N, c_N
   int vecSize = aShares.size();
   vector<FieldType> aN(vecSize);
-  getRandomSharesWithCheck(vecSize, aN);
+  getRandomShares(vecSize, aN);
   vector<FieldType> bN(vecSize);
-  getRandomSharesWithCheck(vecSize, bN);
+  getRandomShares(vecSize, bN);
 
   aShares.insert(aShares.end(), aN.begin(), aN.end());
   bShares.insert(bShares.end(), bN.begin(), bN.end());
@@ -906,13 +924,6 @@ template <class FieldType> void ProtocolParty<FieldType>::inputPhase() {
       inputShares[k] = share;
     }
   }
-  inputVerification(inputShares);
-}
-
-template <class FieldType>
-void ProtocolParty<FieldType>::inputVerification(
-    vector<FieldType> &inputShares) {
-  batchConsistencyCheckOfShares(inputShares);
 }
 
 template <class FieldType>
@@ -926,14 +937,6 @@ void ProtocolParty<FieldType>::getRandomShares(
   _singleSharesOffset += numOfRandoms;
 }
 
-template <class FieldType>
-void ProtocolParty<FieldType>::getRandomSharesWithCheck(
-    int numOfRandoms, vector<FieldType> &randomElementsToFill) {
-
-  getRandomShares(numOfRandoms, randomElementsToFill);
-
-  batchConsistencyCheckOfShares(randomElementsToFill);
-}
 
 template <class FieldType>
 vector<byte> ProtocolParty<FieldType>::generateCommonKey() {
@@ -957,69 +960,6 @@ vector<byte> ProtocolParty<FieldType>::generateCommonKey() {
   }
   aesKey.resize(16);
   return aesKey;
-}
-
-template <class FieldType>
-void ProtocolParty<FieldType>::generatePseudoRandomElements(
-    vector<byte> &aesKey, vector<FieldType> &randomElementsToFill,
-    int numOfRandomElements) {
-
-  int fieldSize = _field->getElementSizeInBytes();
-  int fieldSizeBits = _field->getElementSizeInBits();
-  bool isLongRandoms;
-  int size;
-  if (fieldSize > 4) {
-    isLongRandoms = true;
-    size = 8;
-  } else {
-
-    isLongRandoms = false;
-    size = 4;
-  }
-
-  if (flag_print) {
-    cout << "size is " << size << " for party : " << _myId << endl;
-  }
-
-  PrgFromOpenSSLAES prg((numOfRandomElements * size / 16) + 1);
-  SecretKey sk(aesKey, "aes");
-  prg.setKey(sk);
-
-  for (int i = 0; i < numOfRandomElements; i++) {
-
-    if (isLongRandoms)
-      randomElementsToFill[i] = _field->GetElement(
-          ((unsigned long)prg.getRandom64()) >> (64 - fieldSizeBits));
-    else
-      randomElementsToFill[i] = _field->GetElement(prg.getRandom32());
-  }
-}
-
-template <class FieldType>
-void ProtocolParty<FieldType>::batchConsistencyCheckOfShares(
-    const vector<FieldType> &inputShares) { 
-  // first generate the common aes key
-  auto key = generateCommonKey();
-  // calc the number of times we need to run the verification -- ceiling
-  vector<FieldType> randomElements(inputShares.size() * verifyIterations);
-  generatePseudoRandomElements(key, randomElements, inputShares.size());
-
-  for (int j = 0; j < verifyIterations; j++) {
-    vector<FieldType> r(1); // vector holding the random shares generated
-    vector<FieldType> v(1);
-    vector<FieldType> secret(1);
-
-    getRandomShares(1, r);
-
-    for (int i = 0; i < inputShares.size(); i++)
-      v[0] += randomElements[i + j * inputShares.size()] * inputShares[i];
-
-    v[0] += r[0];
-
-    // if all the the parties share lie on the same polynomial this will not
-    // abort
-    openShare(1, v, secret);
-  }
 }
 
 template <class FieldType>
@@ -1061,8 +1001,8 @@ void ProtocolParty<FieldType>::initializationPhase() {
     alpha_2n[i] = _field->GetElement(i + 1);
     alpha_2n[i+_N] = _field->GetElement(i+_N+1);
   }
-  _mat_n_to_n.allocate(_N, _N, _field);
-  _mat_n_to_n.InitHIMVectorAndsizes(alpha_2n, _N, _N);
+  _mat_T_to_n.allocate(_N, _T, _field);
+  _mat_T_to_n.InitHIMVectorAndsizes(alpha_2n, _T, _N);
 
   matForRefresh(_myId, _mat_to_T);
   
@@ -1077,12 +1017,6 @@ void ProtocolParty<FieldType>::initializationPhase() {
 template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
   setUpSeeds();
   // ---- # of random single shares:
-  // 1. Generating AES keys and verification
-  //    [keySize + verifyIterations]
-  //    -- inputVerification() -> 1 time
-  //    -- generateRandom2TAndTShares() -> 1 time
-  //    -- verificationPhase() -> 2 times in base case
-  //    in total: 4 * (keySize + verifyIterations)
   // 2. Padding vector product verification in base case
   //    [2 * vecSize] // which is at most _K
   //    in total: 2 * _K
@@ -1090,8 +1024,7 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
   //    [1]
   //    in total: nCompressions + 2
   int nCompressions = (int)(log(this->numOfMultGates) / log(_K) + 0.5);
-  int numSingleShares =
-    4 * (keySize + verifyIterations) + 2 * _K + nCompressions + 2;
+  int numSingleShares = 2 * _K + nCompressions + 2;
   _singleSharesOffset = 0;
   makeRandShares(numSingleShares, _singleSharesArray);
   // cout << "generated single Shares: " << numSingleShares << endl;
@@ -1382,19 +1315,20 @@ batchMultSingle(vector<FieldType>& e2Shares, vector<FieldType>& e1Shares) {
     secrets[i] = interpolate_to_zero(e2ShareAll);
   }
 
-  // TODO: [ask] makeTShares sets Disp shares to zero? (used in analyze sharing)
   vector<vector<FieldType>> eSharesAll(_N, vector<FieldType>(myLoad, _zero)),
     prgRecShares(_N);
   for (int i=0; i<_N; i++) {
     prgRecShares[i].resize(e2SharesLoad[i].size());
   }
-  makeTSharesPrg(secrets, eSharesAll, prgRecShares); // TODO here
+  makeTSharesPrg(secrets, eSharesAll, prgRecShares);
 
   vector<vector<byte>>
     e1SharesByte(_N, vector<byte>(maxLoad * _fieldByteSize, 0)),
     sendBufs(_N, vector<byte>(maxLoad * _fieldByteSize, 0));
   for (int i=0; i < _N; i++) {
-    _field->elementVectorToByteVector(eSharesAll[i], sendBufs[i]);
+    if (_TMasks[_myId][i]) {
+      _field->elementVectorToByteVector(eSharesAll[i], sendBufs[i]);
+    }
   }
   _comm.allToT(sendBufs, e1SharesByte);
   // -- convert byte to elements
@@ -1495,6 +1429,8 @@ FieldType ProtocolParty<FieldType>::randomCoin() {
   vector<FieldType> lambda(1);
   getRandomShares(1, lambdaShare);
   openShare(1, lambdaShare, lambda);
+  vector<vector<byte>> sendEmpty(_N), recEmpty(_N);
+  _comm.allToAll(sendEmpty, recEmpty); // sync after public coin
   return lambda[0];
 }
 
@@ -1547,7 +1483,7 @@ template <class FieldType> void ProtocolParty<FieldType>::outputPhase() {
 
       if (flag_print_output)
         cout << "the result for " << circuit.getGates()[k].input1
-             << " is : " << _field->elementToString(interpolate_to_zero(x1)) << '\n';
+             << " is : " << _field->elementToString(reconstructShare(x1, _T+1)) << '\n';
       counter++;
     }
   }
