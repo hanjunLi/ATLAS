@@ -62,7 +62,7 @@ private:
   vector<HIM<FieldType>> _mat_use_n_twist_vec; // all _N points (and 0) to i
   HIM<FieldType> _mat_check_tp1; // first t+1 points to rest N-t-1
   HIM<FieldType> _mat_check_km1; // first k points to rest 2k-1 - k
-  HIM<FieldType> _mat_n_to_n;    // n points to n points
+  HIM<FieldType> _mat_T_to_n;    // n points to n points
   VDMTranspose<FieldType> _mat_vand_trans; // for extracting random shares
   vector<FieldType> _buffer;    // for interp to a sinlge element
 
@@ -97,6 +97,8 @@ private:
 
   HIM<FieldType> _mat_to_T;    // for calculating share of T set
   HIM<FieldType> _mat_from_T;  // for calculating share of nonT set
+  vector<bool> _TMask;         //
+  vector<bool> _TMaskRev;      //
   vector<HIM<FieldType>> _mat_twist_vec;
   bool _newDisp = true;         // flag new Disp pair added
 
@@ -239,13 +241,11 @@ private:
     //    (passed by size)
     // 2. if i >= _myId, "receive" before "send"
     // 3. store "received" shares
-    vector<bool> TMask;
     for (int i=_myId+1; i<_N; i++) {
       if (_disp.isDisp(_myId, i)) { // will not "receive" prg shares
         continue;
       }
-      _disp.tMaskP(i, TMask);
-      if (TMask[_myId]) {       // will receive actual shares
+      if (_TMaskRev[i]) {       // will receive actual shares
         continue;
       }
       int nRand = prgRecShares[i].size();
@@ -258,8 +258,7 @@ private:
       if (_disp.isDisp(_myId, i)) { // will not "receive" prg shares
         continue;
       }
-      _disp.tMaskP(i, TMask);
-      if (TMask[_myId]) {       // will receive actual shares
+      if (_TMaskRev[i]) {       // will receive actual shares
         continue;
       }
       int nRand = prgRecShares[i].size();
@@ -607,6 +606,8 @@ bool ProtocolParty<FieldType>::runOffline(int segStart, int segEnd) {
     matForRefresh(_myId, _mat_from_T, _mat_to_T);
     // -- prepare mat for twisted sharing
     matForTwist(_myId, _mat_twist_vec);
+    _disp.tMaskPRev(_myId, _TMaskRev);
+    _disp.tMaskP(_myId, _TMask);
   }
   
   return prepareSeg();
@@ -1000,8 +1001,12 @@ template <class FieldType> void ProtocolParty<FieldType>::inputPhase() {
   vector<vector<byte>> sendBufs, recBufs(_N);
   sendBufs.resize(_N, vector<byte>(sizes[_myId] * _fieldByteSize));
   for (int i = 0; i < _N; i++) {
-    _field->elementVectorToByteVector(inputSharesAll[i], sendBufs[i]);
-    recBufs[i].resize(sizes[i] * _fieldByteSize, 0);
+    if (_TMask[i]) {
+      _field->elementVectorToByteVector(inputSharesAll[i], sendBufs[i]);
+    }
+    if (_TMaskRev[i]) {
+      recBufs[i].resize(sizes[i] * _fieldByteSize, 0);
+    }
   }
   for (int i=0; i<_N; i++) {
     if (!_disp.isCorrupt(i)) {
@@ -1010,11 +1015,9 @@ template <class FieldType> void ProtocolParty<FieldType>::inputPhase() {
   }
   // -- convert received bytes to shares
   vector<vector<FieldType>> inputShares(_N);
-  vector<bool> TMask;
   for (int i = 0; i < _N; i++) {
     inputShares[i].resize(sizes[i], _zero);
-    _disp.tMaskP(i, TMask);
-    if (TMask[_myId]) {
+    if (_TMaskRev[i]) {
       for (int j = 0; j < sizes[i]; j++) { // receive actual shares
         inputShares[i][j] =
           _field->bytesToElement(recBufs[i].data() + (j * _fieldByteSize));
@@ -1054,18 +1057,18 @@ makeRandShares(int nRands, vector<FieldType> &randShares) {
   recordDeltShares(randSharesAll, _deltShares);
   vector<vector<byte>> sendBufs(_N, vector<byte>(nBuckets*_fieldByteSize));
   for (int i=0; i<_N; i++) {
-    _field->elementVectorToByteVector(randSharesAll[i], sendBufs[i]);
+    if (_TMask[i]) {
+      _field->elementVectorToByteVector(randSharesAll[i], sendBufs[i]);
+    }
   }
   vector<vector<byte>> recBufs(_N, vector<byte>(nBuckets*_fieldByteSize, 0));
   _comm.allToT(sendBufs, recBufs);
   
   int count = 0;
   vector<FieldType> bufferIn(_N), bufferOut(_N);
-  vector<bool> TMask;
   for (int i=0; i<nBuckets; i++) { // improve: switch loop order
     for (int j=0; j<_N; j++) {
-      _disp.tMaskP(j, TMask);
-      if (TMask[_myId]) {
+      if (_TMaskRev[j]) {
         bufferIn[j] =
           _field->bytesToElement(recBufs[j].data() + i * _fieldByteSize);
       } else {
@@ -1086,13 +1089,13 @@ template <class FieldType>
 void ProtocolParty<FieldType>::
 makeRandDoubleShares(int nRands, vector<FieldType> &randSharePairs, vector<int>& kingIds) {
   // t-wise independent double sharings:
-  // 1. use _N x _N HIM to extract randomness
-  // 2. keep _N - nCorr resulting shares per bucket
-  // 3. assign and record kingId for each share
+  // 1. get t+1 true rand sharings
+  // 2. expand every t to n
   int nCorr = _disp.nCorrupt();
-  int nBuckets = (nRands / (_N - nCorr)) + 1;
-  randSharePairs.resize(nBuckets * (_N - nCorr) * 2);
-  kingIds.resize(nBuckets * (_N - nCorr));
+  int nExpands = (nRands + _N -nCorr -1) / (_N - nCorr); // corr can't be king
+  int nBuckets = (nExpands * _T + _T) / (_T+1);
+  randSharePairs.resize(nExpands * (_N - nCorr) * 2);
+  kingIds.resize(nExpands * (_N - nCorr));
 
   vector<FieldType> secrets;
   vector<vector<FieldType>> dSharesAll, sharesAll,
@@ -1104,17 +1107,18 @@ makeRandDoubleShares(int nRands, vector<FieldType> &randSharePairs, vector<int>&
   recordDeltShares(sharesAll, _deltShares);
   vector<vector<byte>> sendBufs(_N, vector<byte>(nBuckets*_fieldByteSize));
   for (int i=0; i<_N; i++) {
-    _field->elementVectorToByteVector(sharesAll[i], sendBufs[i]);
+    if (_TMask[i]) {
+      _field->elementVectorToByteVector(sharesAll[i], sendBufs[i]);
+    }
   }
   vector<vector<byte>> recBufs(_N, vector<byte>(nBuckets*_fieldByteSize, 0));
   _comm.allToT(sendBufs, recBufs);
   int count = 0;
-  vector<FieldType> bufferIn(_N), bufferIn2(_N), bufferOut(_N), bufferOut2(_N);
-  vector<bool> TMask;
+  vector<FieldType> bufferIn(_N), bufferIn2(_N), bufferOut(_N), bufferOut2(_N),
+    toExpand(nBuckets*(_N-_T)), toExpand2(nBuckets*(_N-_T));
   for (int i=0; i<nBuckets; i++) {
     for (int j=0; j<_N; j++) {
-      _disp.tMaskP(j, TMask);
-      if (TMask[_myId]) {
+      if (_TMaskRev[j]) {
         bufferIn[j] =
           _field->bytesToElement(recBufs[j].data() + i*_fieldByteSize);
       } else {
@@ -1124,14 +1128,29 @@ makeRandDoubleShares(int nRands, vector<FieldType> &randSharePairs, vector<int>&
       _recShares.push_back(bufferIn[j]);
       _dealerIds.push_back(j);
     }
-    _mat_n_to_n.MatrixMult(bufferIn, bufferOut);
-    _mat_n_to_n.MatrixMult(bufferIn2, bufferOut2);
-    for (int j=0; j<_N; j++) {
+    _mat_vand_trans.MatrixMult(bufferIn, bufferOut, _N - _T);
+    _mat_vand_trans.MatrixMult(bufferIn2, bufferOut2, _N - _T);
+    for (int j=0; j<_N - _T; j++) {
+      toExpand[count] = bufferOut[j];
+      toExpand2[count] = bufferOut2[j];
+      count++;
+    }
+  }
+  count = 0;
+  bufferIn.resize(_T);
+  bufferIn2.resize(_T);
+  for (int i=0; i<nExpands; i++) {
+    for (int j=0; j<_T; j++) {
+      bufferIn[j] = toExpand[i*_T+j];
+      bufferIn2[j] = toExpand2[i*_T+j];
+    }
+    _mat_T_to_n.MatrixMult(bufferIn, bufferOut);
+    _mat_T_to_n.MatrixMult(bufferIn2, bufferOut2);
+    for (int j = 0; j < _N; j++) {
       if (!_disp.isCorrupt(j)) {
         randSharePairs[count*2] = bufferOut[j];
         randSharePairs[count*2+1] = bufferOut2[j];
-        kingIds[count] = j;
-        count++;
+        kingIds[count++] = j;
       }
     }
   }
@@ -1443,8 +1462,8 @@ void ProtocolParty<FieldType>::initializeMat() {
   _mat_use_n.InitHIMByVectors(alpha_n, beta_zero);
 
   // Interpolate from frist _N to next _N
-  _mat_n_to_n.allocate(_N, _N, _field);
-  _mat_n_to_n.InitHIMVectorAndsizes(alpha_2n, _N, _N);
+  _mat_T_to_n.allocate(_N, _T, _field);
+  _mat_T_to_n.InitHIMVectorAndsizes(alpha_2n, _T, _N);
 
   matFor2TTwist(_mat_use_n_twist_vec);
   
@@ -1577,7 +1596,9 @@ refresh(vector<FieldType>& xShares) {
     recordDeltShares(oSharesAll, _deltOShares);
     sendBufs.resize(_N, vector<byte>(nShares * _fieldByteSize));
     for (int i=0; i<_N; i++) {
-      _field->elementVectorToByteVector(oSharesAll[i], sendBufs[i]);
+      if (_TMask[i]) {
+        _field->elementVectorToByteVector(oSharesAll[i], sendBufs[i]);
+      }
     }
   }
 
@@ -1696,7 +1717,9 @@ batchMultSingle(vector<FieldType>& e2Shares, vector<FieldType>& e1Shares) {
   vector<vector<byte>> e1SharesByte(_N, vector<byte>(maxLoad * _fieldByteSize, 0)),
     sendBufs(_N, vector<byte>(maxLoad * _fieldByteSize, 0));
   for (int i=0; i < _N; i++) {
-    _field->elementVectorToByteVector(eSharesAll[i], sendBufs[i]);
+    if (_TMask[i]) {
+      _field->elementVectorToByteVector(eSharesAll[i], sendBufs[i]);
+    }
   }
   _comm.allToT(sendBufs, e1SharesByte);
   
@@ -1709,11 +1732,9 @@ batchMultSingle(vector<FieldType>& e2Shares, vector<FieldType>& e1Shares) {
   // -- convert byte to elements
   vector<int> idx(_N, 0);
   e1Shares.resize(nMults);
-  vector<bool> TMask;
   for (int i = 0; i < nMults; i++) {
     int king = _doubleKingIds[i + _doubleOffset];
-    _disp.tMaskP(king, TMask);
-    if (TMask[_myId]) {
+    if (_TMaskRev[king]) {
       e1Shares[i] = _field->bytesToElement(e1SharesByte[king].data() +
                                            (idx[king]++) * _fieldByteSize);
     } else {
