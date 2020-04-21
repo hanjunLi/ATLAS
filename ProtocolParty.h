@@ -2038,7 +2038,7 @@ CompareGate<FieldType>::CompareGate(ProtocolParty<FieldType> *ptr,int siz,int id
 	_bitShareOffset=0;
 	eleSize = siz;
 	field = f;
-	int numBitShares = helper->numOfCompareGates;
+	int numBitShares = helper->numOfCompareGates + 100;
 	if(flag_print)
 		cout<<"generating bit shares:"<<numBitShares<<endl;
 	generateBitShares(numBitShares);
@@ -2526,6 +2526,34 @@ inline void CompareGate<ZZ_p>::compHalfP(vector<ZZ_p> &X, vector<ZZ_p> &dest)
 	getRandomBitShare(tot,r,rBits);
 	if(flag_print)
 		cout<<"compHalfP::Successfully get shares"<<endl;
+	if(flag_print)
+	{
+		cout<<"checking valid of bit share"<<endl;
+		vector<ZZ_p> tmp;
+		vector<ZZ> tmpres;
+		for(int i=0; i<tot; i++)
+		{
+			helper->openShare(eleSize,rBits[i],tmp);
+			ZZ _t(0);
+			for(int j=0; j<eleSize; j++)
+			{
+				cout<<"bit "<<j<<":"<<tmp[j]<<endl;
+				_t = _t * 2 + conv<ZZ>(tmp[j]);
+			}
+			if(_t > (1ll<<61))
+			{
+				cout<<"too large generated!"<<endl;
+				abort();
+			}
+			tmpres.push_back(_t);
+		}
+		helper->openShare(tot,r,tmp);
+		for(int i=0; i<tot; i++)
+			if((tmp[i]-conv<ZZ_p>(tmpres[i])) != ZZ_p(0))
+			{
+				cout<<"find difference:"<<tmp[i]<<","<<tmpres[i]<<endl;
+			}
+	}
 	//step 2: compute [c] = [x] + [r], and reveal c
 	vector<ZZ_p> resvec,tmpvec;
 	for(int i=0; i<tot; i++)
@@ -2561,7 +2589,7 @@ inline void CompareGate<ZZ_p>::compHalfP(vector<ZZ_p> &X, vector<ZZ_p> &dest)
 	{
 		if(rep(tmpvec[i]) % 2 ==0)
 			rescr0.push_back(rBits[i][this->eleSize-1]);
-		else rescr0.push_back(1 - rBits[0][this->eleSize-1]);
+		else rescr0.push_back(1 - rBits[i][this->eleSize-1]);
 	}
 	vector<ZZ_p> tmpres;
 	helper->DNMultVec(rescr0,comp_res,tmpres,1);
@@ -2607,9 +2635,16 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 		res[suc]=0;
 		//generate from MSB to LSB
 		//first 3 bits: 0
+		if(_bitSharesValue.size() <= _bitShareOffset + eleSize)
+		{
+			cout<<"Not enough bit share!"<<endl;
+			generateBitShares(num+5-suc);
+		}
 		for(int j=0; j<3; j++)
 		{
-			bits[suc][j] = _zeroShares[_zeroShareOffset++];
+			bits[suc][j] = 0;
+			//bits[suc][j] = _zeroShares[_zeroShareOffset++];
+			//res[suc] = res[suc] * FieldType(2) + bits[suc][j];
 			if(_zeroShareOffset >= _zeroShares.size())
 			{
 				cout<<"not enough zero shares"<<endl;
@@ -2623,14 +2658,33 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 		}
 		if(_bitSharesValue.size() <= _bitShareOffset) //not enough?
 		{
+			cout<<"This can't happen!"<<endl;
+			abort();
 			if(flag_print)
 				cout<<"Not enough bit share! Regenerating....."<<endl;
 			generateBitShares(num+5-suc);
 		}
 	}
 	if(flag_print)
+	{
 		cout<<"gen bit done, checking"<<endl;
-	vector<FieldType> chk_suc;
+		vector<FieldType> tmp;
+		helper->openShare(num,res,tmp);
+		for(int i=0; i<num; i++)
+			cout<<"generated a number "<<tmp[i]<<endl;
+		for(int i=0; i<num; i++)
+		{
+			vector<FieldType> tmp2;
+			helper->openShare(eleSize,bits[i],tmp2);
+			FieldType cur(0);
+			for(int j=0; j<eleSize; j++)
+				cur = cur * FieldType(2) + tmp2[j];
+			if(cur != tmp[i])
+				cout<<"difference in share:"<<cur<<","<<tmp[i]<<endl;
+		}
+	}
+	
+
 	/*compP(bits,chk_suc);
 	  if(flag_print)
 	  cout<<"genBit:compP ended"<<endl;
@@ -2651,6 +2705,7 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 	helper->openShare(num,chk_suc,vc2);*/
 	//TODO: can we use '=' like this?
 	//notice: compGiven gives [p < c], here we need to change direction
+	/*
 	int tcnt=0;
 	for(int l=0; l<num && tcnt<num; l++)
 		//if(vc2[l]==FieldType(0)) //valid share 
@@ -2677,7 +2732,7 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 	}
 	else if(flag_print)
 		cout<<"First try passed!"<<endl;
-
+*/
 	if(flag_print)
 	{
 		vector<FieldType> tmp;
@@ -3189,29 +3244,40 @@ inline void CompareGate<ZZ_p>::SoftThres(vector<ZZ_p> &thres,vector<ZZ_p> &a,vec
 	}
 	vector<ZZ_p> res1,res2,tmp1,tmp2,tmp3,add1,add2,add3;
 	//test 1: a[i] ?> thres
-	compRandom(thresPos, a, res1);
-	compRandom(a,thresNeg, res2);
+	//compGiven(a,thresPos,res1);
+	//compGiven(a,thresNeg,res2);
+	//for(int i=0; i<dim; i++)
+	//	res2[i] = 1-res2[i];
+	compRandom(b, thresPos,res1);
+	compRandom(thresNeg, b,res2);
 	if(flag_print)
 	{
-		cout<<"checking result of comprandom"<<endl;
-		vector<ZZ_p> _t0;
+		cout<<"SoftThres: checking result of comprandom"<<endl;
+		vector<ZZ_p> _t0,_t1;
 		helper->openShare(res1.size(),res1,_t0);
-		helper->openShare(res2.size(),res2,_t0);
+		helper->openShare(res2.size(),res2,_t1);
 		cout<<"comprandom passed"<<endl;
+		for(int i=0; i<tot; i++)
+			cout<<"result of "<<i<<":"<<_t0[i]<<","<<_t1[i]<<endl;
 	}
-	doubleVecMult(res1,res2,tmp3);
-	doubleVecMult(tmp3, a, add3); //add3 haved been trunced
+	//notice res1 and res2 are 0 ot 1 (without 2^-k)
+	helper->DNMultVec(res1,res2,tmp3,1);
+	if(flag_print)
+		cout<<"end of mult1"<<endl;
+	helper->DNMultVec(tmp3, a, add3, 1); 
+	if(flag_print)
+		cout<<"end of mult2"<<endl;
 	for(int i=0; i<tot; i++)
 	{
-		tmp1.push_back(thres[i] * res1[i]);
-		tmp2.push_back(thres[i] * res2[i]);
+		tmp1.push_back(thres[i] * (1-res1[i]));
+		tmp2.push_back(thres[i] * (1-res2[i]));
 	}
-	TruncPR(tmp1,add1);
-	TruncPR(tmp2,add2);
+	//TruncPR(tmp1,add1);
+	//TruncPR(tmp2,add2);
 	if(res.size()<tot)
 		res.resize(tot);
 	for(int i=0; i<tot; i++)
-		res[i]=add2[i] - add3[i] -add1[i];
+		res[i]= a[i] + tmp2[i] - add3[i] -tmp1[i];
 }
 template<class FieldType>
 void CompareGate<FieldType>::doubleInverse(FieldType a,FieldType &res)
@@ -3450,6 +3516,26 @@ inline void CompareGate<ZZ_p>::runLasso(int iter,ZZ_p lambda, ZZ_p rho, vector<v
 		helper->openShare(dim,a2,a3);
 		for(int i=0; i<dim; i++)
 			cout<<bi[i]<<"->"<<a3[i]<<endl;
+	}
+
+	//testing softThres
+	if(flag_print)
+	{
+		vector<ZZ_p> _res,_ans;
+		helper->openShare(dim,shareOfB[0],_ans);
+		cout<<"Thres:"<<endl;
+		for(int i=0; i<dim; i++)
+			cout<<_ans[i]<<endl;
+		helper->openShare(dim,shareOfA[0][0],_ans);
+		cout<<"A:"<<endl;
+		for(int i=0; i<dim; i++)
+			cout<<_ans[i]<<endl;
+		SoftThres(bi,shareOfA[0][0],_res);
+		cout<<"checking valid of softThres"<<endl;
+		helper->openShare(dim,_res,_ans);
+		cout<<"passed, checking softThres"<<endl;
+		for(int i=0; i<dim; i++)
+			cout<<Ai[0][i]<<"->"<<_ans[i]<<endl;
 	}
 	//start iteration.
 	for(int _t=0; _t<iter; _t++)
