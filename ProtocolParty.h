@@ -22,7 +22,7 @@
 
 
 #include "Interpolate.h"
-#include "Comparison.h"
+// #include "Comparison.h"
 #include <cmath>
 
 #define flag_print false
@@ -31,7 +31,7 @@
 using namespace std;
 using namespace std::chrono;
 
-template<class FieldType> class CompareGate;
+// template<class FieldType> class CompareGate;
 
 template <class FieldType>
 class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
@@ -40,7 +40,7 @@ class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 		// -- polynomial functionalities
 		Interpolate<FieldType> interp; // evaluate (O(n)), interpolate polynomials (O(n^2))
 		vector<FieldType> gateShareArr; // my share of each gate (1 share each)
-		int numOfCompareGates;
+		// int numOfCompareGates;
 		int N, T;
 		VDM<FieldType> matrix_vand;
 		//inputs for helen circuit
@@ -61,7 +61,7 @@ class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 		Measurement *timer;
 		TemplateField<FieldType> *field; // used to call some field functions
 		ProtocolTimer *protocolTimer;
-		CompareGate<FieldType> *comper;
+		// CompareGate<FieldType> *comper;
 		// N, T - number of parties, malicious
 		int keySize, verifyIterations, m_partyId, eleSize;
 		string s;                     // string of my_partyId
@@ -168,7 +168,7 @@ class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 				vector<FieldType> &secrets);
 		FieldType randomCoin();
 		
-		int processComp();
+		// int processComp();
 		// --  helper functions
 		void getRandomShares(int numOfRandoms,
 				vector<FieldType> &randomElementsToFill);
@@ -182,6 +182,12 @@ class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 		// locally interpolate received sharing
 		FieldType reconstructShare(vector<FieldType> &x, int d);
 		FieldType interpolate_to_zero(vector<FieldType> &x);
+
+                // -- external access
+                int getN() {return N;}
+                int getT() {return T;}
+                int getMyId() {return m_partyId;}
+                TemplateField<FieldType>* getField() {return field;}
 };
 
 
@@ -234,7 +240,7 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
 		this->numOfOutputGates = circuit.getNrOfOutputGates();
 		//should we +1 to avoid log(0)?
 		this->numOfMultGates = circuit.getNrOfMultiplicationGates() + 1;
-		this->numOfCompareGates = circuit.getNrOfCompareGates();
+		// this->numOfCompareGates = circuit.getNrOfCompareGates();
 		this->myInputs.resize(numOfInputGates);
 		cout<<"# of inputs:"<<numOfInputGates<<endl;
 		readLassoInputs();
@@ -341,8 +347,8 @@ template <class FieldType> void ProtocolParty<FieldType>::run() {
 		tottme += duration;
 	}
 	cout<<"Total time:"<<tottme<<endl;
-	cout<<"Gates:"<<numOfMultGates + numOfCompareGates<<endl;
-	cout<<"Ave time:"<<(double)tottme / times / (numOfMultGates + numOfCompareGates);
+	// cout<<"Gates:"<<numOfMultGates + numOfCompareGates<<endl;
+	// cout<<"Ave time:"<<(double)tottme / times / (numOfMultGates + numOfCompareGates);
 }
 
 template <class FieldType> void ProtocolParty<FieldType>::runOffline() {
@@ -411,14 +417,14 @@ void ProtocolParty<FieldType>::computationPhase() {
 	vector<FieldType> res;
 	if(flag_print)
 		cout<<"running lasso"<<endl;
-	comper->runLasso(10,FieldType(1ll<<(7)),FieldType(1ll<<(7)),_Ai,_bi,res);
-	//if(flag_print)
-	{
-		cout<<"Lasso finished"<<endl;
-	cout<<"Used single:"<<_singleSharesOffset<<"/"<<_singleSharesArray.size()<<","<<(double)_singleSharesOffset / _singleSharesArray.size()<<",left:"<<_singleSharesArray.size() - _singleSharesOffset << endl;
-		cout<<"Used double:"<<2 * _doubleSharesOffset<<"/"<<_doubleSharesArray.size()<<","<<(double)2*_doubleSharesOffset / _doubleSharesArray.size()<<",left:"<<-2*_doubleSharesOffset + _doubleSharesArray.size()<<endl;
-	}
-	abort();
+	// comper->runLasso(10,FieldType(1ll<<(7)),FieldType(1ll<<(7)),_Ai,_bi,res);
+	// //if(flag_print)
+	// {
+	// 	cout<<"Lasso finished"<<endl;
+	// cout<<"Used single:"<<_singleSharesOffset<<"/"<<_singleSharesArray.size()<<","<<(double)_singleSharesOffset / _singleSharesArray.size()<<",left:"<<_singleSharesArray.size() - _singleSharesOffset << endl;
+	// 	cout<<"Used double:"<<2 * _doubleSharesOffset<<"/"<<_doubleSharesArray.size()<<","<<(double)2*_doubleSharesOffset / _doubleSharesArray.size()<<",left:"<<-2*_doubleSharesOffset + _doubleSharesArray.size()<<endl;
+	// }
+	// abort();
 	int countNumMult = _doubleSharesOffset;
 	int numOfLayers = circuit.getLayers().size();
 	for (int i = 0; i < numOfLayers - 1; i++) {
@@ -427,7 +433,7 @@ void ProtocolParty<FieldType>::computationPhase() {
 		currentCircuitLayer = i;
 		// send the index of the current mult gate
 		processNotMult();
-		processComp();
+		// processComp();
 		if(flag_print)
 			cout<<countNumMult<<endl;
 		//TODO: just for test
@@ -1184,8 +1190,8 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
 	//cout<<"#comp:"<<numOfCompareGates<<endl;
 	int nCompressions = (int)(log(this->numOfMultGates) / log(_K) + 0.5);
 	int numSingleShares =
-		4 * (keySize + verifyIterations) + 2 * _K + nCompressions + 2
-		+ 60 * eleSize *numOfCompareGates;
+                4 * (keySize + verifyIterations) + 2 * _K + nCompressions + 2;
+		// + 60 * eleSize *numOfCompareGates;
 	//cout<<"should have num:"<<numSingleShares<<endl;
 	numSingleShares += 100000;
 	_singleSharesOffset = 0;
@@ -1201,7 +1207,8 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
 	// 2. Compress Verification
 	//    -- 2 * _K * (nCompressions + 1)
 	int numDoubleShares =
-		this->numOfMultGates + (nCompressions+1)*_K*2 + 100 * eleSize * this->numOfCompareGates;
+                this->numOfMultGates + (nCompressions+1)*_K*2;
+        // + 100 * eleSize * this->numOfCompareGates;
 	//used for Lasso?
 	numDoubleShares += 100000;
 	_doubleSharesOffset = 0;
@@ -1213,7 +1220,7 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
 	//can be implemented in a more efficient way.
 
 	//put it here to let bit share to be generated
-	this->comper = new CompareGate<FieldType>(this,eleSize,m_partyId,field);
+	// this->comper = new CompareGate<FieldType>(this,eleSize,m_partyId,field);
 	//vector<FieldType> tmp,tmpnum;
 	//int tot = eleSize * (N+2);
 	/*OrVector.resize(tot);
@@ -1933,41 +1940,41 @@ void ProtocolParty<FieldType>::sendDataFromP1(vector<byte> &sendBuf, int first,
 }
 
 
-	template<class FieldType>
-int ProtocolParty<FieldType>::processComp()
-{
-	//step 1: go through gates
-	int cnt = 0;
-	vector<FieldType> a,b,res;
-	for(int k = circuit.getLayers()[currentCircuitLayer];
-			k<circuit.getLayers()[currentCircuitLayer + 1]; k++)
-	{
-		auto gate = circuit.getGates()[k];
-		if(gate.gateType == COMPARE)
-		{
-			cnt++;
-			a.push_back(gateShareArr[gate.input1]);
-			b.push_back(gateShareArr[gate.input2]);	
-			//tmp.push_back(gate);
-		}
-	}
-	comper->compRandom(a,b,res);
-	cnt = 0;
-	for(int k = circuit.getLayers()[currentCircuitLayer];
-			k<circuit.getLayers()[currentCircuitLayer + 1]; k++)
-	{
-		auto gate = circuit.getGates()[k];
-		if(gate.gateType == COMPARE)
-			gateShareArr[gate.output] = res[cnt++];
-	}
-	if(flag_print)
-	{
-		cout<<"compRandom ended"<<endl;
-		cout<<"Used single:"<<_singleSharesOffset<<"/"<<_singleSharesArray.size()<<","<<(double)_singleSharesOffset / _singleSharesArray.size()<<",left:"<<_singleSharesArray.size() - _singleSharesOffset << endl;
-		cout<<"Used double:"<<2 * _doubleSharesOffset<<"/"<<_doubleSharesArray.size()<<","<<(double)2*_doubleSharesOffset / _doubleSharesArray.size()<<",left:"<<-2*_doubleSharesOffset + _doubleSharesArray.size()<<endl;
-	}
-	return cnt;
-}
+// 	template<class FieldType>
+// int ProtocolParty<FieldType>::processComp()
+// {
+// 	//step 1: go through gates
+// 	int cnt = 0;
+// 	vector<FieldType> a,b,res;
+// 	for(int k = circuit.getLayers()[currentCircuitLayer];
+// 			k<circuit.getLayers()[currentCircuitLayer + 1]; k++)
+// 	{
+// 		auto gate = circuit.getGates()[k];
+// 		if(gate.gateType == COMPARE)
+// 		{
+// 			cnt++;
+// 			a.push_back(gateShareArr[gate.input1]);
+// 			b.push_back(gateShareArr[gate.input2]);	
+// 			//tmp.push_back(gate);
+// 		}
+// 	}
+// 	comper->compRandom(a,b,res);
+// 	cnt = 0;
+// 	for(int k = circuit.getLayers()[currentCircuitLayer];
+// 			k<circuit.getLayers()[currentCircuitLayer + 1]; k++)
+// 	{
+// 		auto gate = circuit.getGates()[k];
+// 		if(gate.gateType == COMPARE)
+// 			gateShareArr[gate.output] = res[cnt++];
+// 	}
+// 	if(flag_print)
+// 	{
+// 		cout<<"compRandom ended"<<endl;
+// 		cout<<"Used single:"<<_singleSharesOffset<<"/"<<_singleSharesArray.size()<<","<<(double)_singleSharesOffset / _singleSharesArray.size()<<",left:"<<_singleSharesArray.size() - _singleSharesOffset << endl;
+// 		cout<<"Used double:"<<2 * _doubleSharesOffset<<"/"<<_doubleSharesArray.size()<<","<<(double)2*_doubleSharesOffset / _doubleSharesArray.size()<<",left:"<<-2*_doubleSharesOffset + _doubleSharesArray.size()<<endl;
+// 	}
+// 	return cnt;
+// }
 
 template <class FieldType> ProtocolParty<FieldType>::~ProtocolParty() {
 	protocolTimer->writeToFile();

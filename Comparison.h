@@ -13,6 +13,7 @@ class CompareGate
 {
 private:
 	ProtocolParty<FieldType> *helper;
+        Interpolate<FieldType> interp;
 	int eleSize;
 	vector<vector<FieldType> > OrVector; //the share of coefficients of fan-in Or function
 	vector<FieldType> _bitSharesValue;
@@ -56,9 +57,13 @@ public:
 	void TruncPR(vector<FieldType> &a,vector<FieldType> &res);//vector<int> &k,vector<int> &m);
 	void doubleVecMult(vector<FieldType> &a,vector<FieldType> &b,vector<FieldType> &res);
 	void SoftThres(vector<FieldType> &thres, vector<FieldType> &a, vector<FieldType> &res);
-	void runLasso(int iter,FieldType lambda, FieldType rho, vector<vector<FieldType> > & Ai, vector<FieldType> &bi, vector<FieldType> &res);
+	
 	//compute 1/a[i] under double
 	void doubleInverse(FieldType a,FieldType &res);
+
+        // TODO:
+        void readLassoInput(vector<vector<FieldType> > & Ai, vector<FieldType> &bi);
+        void runLasso(int iter,FieldType lambda, FieldType rho, vector<vector<FieldType> > & Ai, vector<FieldType> &bi, vector<FieldType> &res);
 };
 
 /////////////////////////////////////////////
@@ -71,10 +76,11 @@ CompareGate<FieldType>::CompareGate(ProtocolParty<FieldType> *ptr,int siz,int id
 	_bitShareOffset=0;
 	eleSize = siz;
 	field = f;
-	int numBitShares = helper->numOfCompareGates + 100;
-	if(flag_print)
-		cout<<"generating bit shares:"<<numBitShares<<endl;
-	generateBitShares(numBitShares);
+        // TODO: generate bit sharings in runLasso()
+	// int numBitShares = helper->numOfCompareGates + 100;
+	// if(flag_print)
+	// 	cout<<"generating bit shares:"<<numBitShares<<endl;
+	// generateBitShares(numBitShares);
 }
 
 	template<class FieldType>
@@ -1048,7 +1054,7 @@ void CompareGate<FieldType>::compFanInOr(int num,vector<vector<FieldType> >&a, v
 			}
 			//if(flag_print)
 			//	cout<<"Ready for Interpolate"<<endl;
-			helper->interp.interpolate(tmpnum, tmp, OrVector[a[i].size()]);
+			interp.interpolate(tmpnum, tmp, OrVector[a[i].size()]);
 			/*if(flag_print)
 			  {
 			  for(int j=0; j<a[i].size()+1; j++)
@@ -1337,8 +1343,8 @@ template<>
 inline void CompareGate<ZZ_p>::runLasso(int iter,ZZ_p lambda, ZZ_p rho, vector<vector<ZZ_p> > & Ai, vector<ZZ_p> &bi, vector<ZZ_p> &res)
 {
 	int dim = Ai.size(); //Ai: dim * dim matrix, bi: dim * 1 vector
-	int N = helper->N;
-	int T = helper->T;
+	int N = helper->getN();
+	int T = helper->getT();
 	int fieldByteSize = eleSize / 8; //field->getElementSizeInBytes();	
 	ZZ_p invN,invrho;
 	ZZ_p ZN(N);
@@ -1370,121 +1376,121 @@ inline void CompareGate<ZZ_p>::runLasso(int iter,ZZ_p lambda, ZZ_p rho, vector<v
 	// Ai
 	if(flag_print)
 		cout<<"Lasso:step 1:"<<endl;
-	for(int l1=0; l1<dim; l1++)
-		for(int l2=0; l2<dim; l2++)
-		{
-			// get the expected sizes from the other parties
+	// for(int l1=0; l1<dim; l1++)
+	// 	for(int l2=0; l2<dim; l2++)
+	// 	{
+	// 		// get the expected sizes from the other parties
 
-			// the value of a_0 is the input of the party.
-			x1[0] = Ai[l1][l2]; //field->GetElement(Ai[l1][l2]);
+	// 		// the value of a_0 is the input of the party.
+	// 		x1[0] = Ai[l1][l2]; //field->GetElement(Ai[l1][l2]);
 
-			// generate random degree-T polynomial
-			for (int i = 1; i < T + 1; i++) {
-				// A random field element, uniform distribution
-				x1[i] = field->Random();
-			}
+	// 		// generate random degree-T polynomial
+	// 		for (int i = 1; i < T + 1; i++) {
+	// 			// A random field element, uniform distribution
+	// 			x1[i] = field->Random();
+	// 		}
 
-			helper->matrix_vand.MatrixMult(x1, y1, T + 1);
+	// 		helper->matrix_vand.MatrixMult(x1, y1, T + 1);
 
-			// prepare shares to be sent
-			for (int i = 0; i < N; i++) {
-				sendBufsElements[i].push_back(y1[i]);
-			}
-		} 
-	//bi
-	for(int l1=0; l1<dim; l1++)
-	{
-		// get the expected sizes from the other parties
+	// 		// prepare shares to be sent
+	// 		for (int i = 0; i < N; i++) {
+	// 			sendBufsElements[i].push_back(y1[i]);
+	// 		}
+	// 	} 
+	// //bi
+	// for(int l1=0; l1<dim; l1++)
+	// {
+	// 	// get the expected sizes from the other parties
 
-		// the value of a_0 is the input of the party.
-		x1[0] = bi[l1]; //field->GetElement(bi[l1]);
+	// 	// the value of a_0 is the input of the party.
+	// 	x1[0] = bi[l1]; //field->GetElement(bi[l1]);
 
-		// generate random degree-T polynomial
-		for (int i = 1; i < T + 1; i++) {
-			// A random field element, uniform distribution
-			x1[i] = field->Random();
-		}
+	// 	// generate random degree-T polynomial
+	// 	for (int i = 1; i < T + 1; i++) {
+	// 		// A random field element, uniform distribution
+	// 		x1[i] = field->Random();
+	// 	}
 
-		helper->matrix_vand.MatrixMult(x1, y1, T + 1);
+	// 	helper->matrix_vand.MatrixMult(x1, y1, T + 1);
 
-		// prepare shares to be sent
-		for (int i = 0; i < N; i++) {
-			sendBufsElements[i].push_back(y1[i]);
-		}
-	}
-	//w,u (initied to 0)
-	for(int l1=0; l1<2*dim; l1++)
-	{
-		// get the expected sizes from the other parties
+	// 	// prepare shares to be sent
+	// 	for (int i = 0; i < N; i++) {
+	// 		sendBufsElements[i].push_back(y1[i]);
+	// 	}
+	// }
+	// //w,u (initied to 0)
+	// for(int l1=0; l1<2*dim; l1++)
+	// {
+	// 	// get the expected sizes from the other parties
 
-		// the value of a_0 is the input of the party.
-		x1[0] = ZZ_p(0); //field->GetElement(0);
+	// 	// the value of a_0 is the input of the party.
+	// 	x1[0] = ZZ_p(0); //field->GetElement(0);
 
-		// generate random degree-T polynomial
-		for (int i = 1; i < T + 1; i++) {
-			// A random field element, uniform distribution
-			x1[i] = field->Random();
-		}
+	// 	// generate random degree-T polynomial
+	// 	for (int i = 1; i < T + 1; i++) {
+	// 		// A random field element, uniform distribution
+	// 		x1[i] = field->Random();
+	// 	}
 
-		helper->matrix_vand.MatrixMult(x1, y1, T + 1);
+	// 	helper->matrix_vand.MatrixMult(x1, y1, T + 1);
 
-		// prepare shares to be sent
-		for (int i = 0; i < N; i++) {
-			sendBufsElements[i].push_back(y1[i]);
-		}
-	}
+	// 	// prepare shares to be sent
+	// 	for (int i = 0; i < N; i++) {
+	// 		sendBufsElements[i].push_back(y1[i]);
+	// 	}
+	// }
 	int zero_cnt = 50000;
-	if(m_partyID==0) //z
-	{
-		if(flag_print)
-			cout<<"find ID 0"<<endl;
-		for(int l1=0; l1<dim + zero_cnt; l1++)
-		{
-			// get the expected sizes from the other parties
+	// if(m_partyID==0) //z
+	// {
+	// 	if(flag_print)
+	// 		cout<<"find ID 0"<<endl;
+	// 	for(int l1=0; l1<dim + zero_cnt; l1++)
+	// 	{
+	// 		// get the expected sizes from the other parties
 
-			// the value of a_0 is the input of the party.
-			x1[0] = ZZ_p(0); //field->GetElement(0);
+	// 		// the value of a_0 is the input of the party.
+	// 		x1[0] = ZZ_p(0); //field->GetElement(0);
 
-			// generate random degree-T polynomial
-			for (int i = 1; i < T + 1; i++) {
-				// A random field element, uniform distribution
-				x1[i] = field->Random();
-			}
+	// 		// generate random degree-T polynomial
+	// 		for (int i = 1; i < T + 1; i++) {
+	// 			// A random field element, uniform distribution
+	// 			x1[i] = field->Random();
+	// 		}
 
-			helper->matrix_vand.MatrixMult(x1, y1, T + 1);
+	// 		helper->matrix_vand.MatrixMult(x1, y1, T + 1);
 
-			// prepare shares to be sent
-			for (int i = 0; i < N; i++) {
-				sendBufsElements[i].push_back(y1[i]);
-			}
-		}
-	}
-	for(int i=1; i<N; i++)
-		sizes[i] = dim*(dim+3);
-	sizes[0] = dim*(dim+4) + zero_cnt;
-	// -- convert shares to bytes
-	for (int i = 0; i < N; i++) {
-		sendBufsBytes[i].resize(sendBufsElements[i].size() * fieldByteSize);
-		recBufBytes[i].resize(sizes[i] * fieldByteSize);
-		for (int j = 0; j < sendBufsElements[i].size(); j++) {
-			field->elementToBytes(sendBufsBytes[i].data() + (j * fieldByteSize),
-					sendBufsElements[i][j]);
-		}
-	}
+	// 		// prepare shares to be sent
+	// 		for (int i = 0; i < N; i++) {
+	// 			sendBufsElements[i].push_back(y1[i]);
+	// 		}
+	// 	}
+	// }
+	// for(int i=1; i<N; i++)
+	// 	sizes[i] = dim*(dim+3);
+	// sizes[0] = dim*(dim+4) + zero_cnt;
+	// // -- convert shares to bytes
+	// for (int i = 0; i < N; i++) {
+	// 	sendBufsBytes[i].resize(sendBufsElements[i].size() * fieldByteSize);
+	// 	recBufBytes[i].resize(sizes[i] * fieldByteSize);
+	// 	for (int j = 0; j < sendBufsElements[i].size(); j++) {
+	// 		field->elementToBytes(sendBufsBytes[i].data() + (j * fieldByteSize),
+	// 				sendBufsElements[i][j]);
+	// 	}
+	// }
 
-	if(flag_print)
-		cout<<"before round"<<endl;
-	helper->roundFunctionSync(sendBufsBytes, recBufBytes, 1);
-	if(flag_print)
-		cout<<"after round"<<endl;
-	// -- convert received bytes to shares
-	for (int i = 0; i < N; i++) {
-		recBufElements[i].resize(sizes[i]);    
-		for (int j = 0; j < sizes[i]; j++) {
-			recBufElements[i][j] =
-				field->bytesToElement(recBufBytes[i].data() + (j * fieldByteSize));
-		}
-	}	
+	// if(flag_print)
+	// 	cout<<"before round"<<endl;
+	// helper->roundFunctionSync(sendBufsBytes, recBufBytes, 1);
+	// if(flag_print)
+	// 	cout<<"after round"<<endl;
+	// // -- convert received bytes to shares
+	// for (int i = 0; i < N; i++) {
+	// 	recBufElements[i].resize(sizes[i]);    
+	// 	for (int j = 0; j < sizes[i]; j++) {
+	// 		recBufElements[i][j] =
+	// 			field->bytesToElement(recBufBytes[i].data() + (j * fieldByteSize));
+	// 	}
+	// }	
 	if(flag_print)
 		cout<<"received"<<endl;
 	//receive shares of other parties
@@ -1640,6 +1646,4 @@ inline void CompareGate<ZZ_p>::runLasso(int iter,ZZ_p lambda, ZZ_p rho, vector<v
 	if(flag_print)
 		cout<<"Used zero:"<<_zeroShareOffset<<"/"<<zero_cnt<<endl;
 }
-
-
 #endif /* COMPARISON_H_ */

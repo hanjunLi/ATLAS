@@ -1,11 +1,14 @@
 
 #include "ProtocolParty.h"
-#include "ZpKaratsubaElement.h"
+#include "Comparison.h"
+// #include "ZpKaratsubaElement.h"
 #include <inttypes.h>
 #include <smmintrin.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <x86intrin.h>
+
+
 
 /**
  * The main structure of our protocol is as follows:
@@ -53,64 +56,68 @@ int main(int argc, char *argv[]) {
   cout << "fieldType = " << fieldType << endl;
 
   if (fieldType.compare("ZpMersenne31") == 0) {
-    ProtocolParty<ZpMersenneIntElement> protocol(argc, argv);
-    auto t1 = high_resolution_clock::now();
-    protocol.run();
+  //   ProtocolParty<ZpMersenneIntElement> protocol(argc, argv);
+  //   auto t1 = high_resolution_clock::now();
+  //   protocol.run();
 
-    auto t2 = high_resolution_clock::now();
+  //   auto t2 = high_resolution_clock::now();
 
-    auto duration = duration_cast<milliseconds>(t2 - t1).count();
-    cout << "time in milliseconds for " << times << " runs: " << duration
-         << endl;
-    cout << "end main" << '\n';
+  //   auto duration = duration_cast<milliseconds>(t2 - t1).count();
+  //   cout << "time in milliseconds for " << times << " runs: " << duration
+  //        << endl;
+  //   cout << "end main" << '\n';
 
-  } else if (fieldType.compare("ZpMersenne61") == 0) {
+  // } else if (fieldType.compare("ZpMersenne61") == 0) {
 
-    ProtocolParty<ZpMersenneLongElement> protocol(argc, argv);
-    auto t1 = high_resolution_clock::now();
-    protocol.run();
-    auto t2 = high_resolution_clock::now();
+  //   ProtocolParty<ZpMersenneLongElement> protocol(argc, argv);
+  //   auto t1 = high_resolution_clock::now();
+  //   protocol.run();
+  //   auto t2 = high_resolution_clock::now();
 
-    auto duration = duration_cast<milliseconds>(t2 - t1).count();
-    cout << "time in milliseconds for " << times << " runs: " << duration
-         << endl;
-    cout << "end main" << '\n';
+  //   auto duration = duration_cast<milliseconds>(t2 - t1).count();
+  //   cout << "time in milliseconds for " << times << " runs: " << duration
+  //        << endl;
+  //   cout << "end main" << '\n';
 
-  }
+  // }
 
-  else if (fieldType.compare("ZpKaratsuba") == 0) {
-    ProtocolParty<ZpKaratsubaElement> protocol(argc, argv);
-    auto t1 = high_resolution_clock::now();
-    protocol.run();
+  // else if (fieldType.compare("ZpKaratsuba") == 0) {
+  //   ProtocolParty<ZpKaratsubaElement> protocol(argc, argv);
+  //   auto t1 = high_resolution_clock::now();
+  //   protocol.run();
 
-    auto t2 = high_resolution_clock::now();
+  //   auto t2 = high_resolution_clock::now();
 
-    auto duration = duration_cast<milliseconds>(t2 - t1).count();
-    cout << "time in milliseconds for " << times << " runs: " << duration
-         << endl;
-    cout << "end main" << '\n';
-  }
+  //   auto duration = duration_cast<milliseconds>(t2 - t1).count();
+  //   cout << "time in milliseconds for " << times << " runs: " << duration
+  //        << endl;
+  //   cout << "end main" << '\n';
+  // }
 
-  else if (fieldType.compare("GF2m") == 0) {
-    ProtocolParty<GF2E> protocol(argc, argv);
-    auto t1 = high_resolution_clock::now();
-    protocol.run();
+  // else if (fieldType.compare("GF2m") == 0) {
+  //   ProtocolParty<GF2E> protocol(argc, argv);
+  //   auto t1 = high_resolution_clock::now();
+  //   protocol.run();
 
-    auto t2 = high_resolution_clock::now();
+  //   auto t2 = high_resolution_clock::now();
 
-    auto duration = duration_cast<milliseconds>(t2 - t1).count();
-    cout << "time in milliseconds for " << times << " runs: " << duration
-         << endl;
-    cout << "end main" << '\n';
+  //   auto duration = duration_cast<milliseconds>(t2 - t1).count();
+  //   cout << "time in milliseconds for " << times << " runs: " << duration
+  //        << endl;
+  //   cout << "end main" << '\n';
+    abort();
   }
 
   else if (fieldType.compare("Zp") == 0) {
-    ProtocolParty<ZZ_p> protocol(argc, argv);
+    ProtocolParty<ZZ_p> mpc_protocol(argc, argv);
+    CompareGate<ZZ_p> comp_protocol(&mpc_protocol, 128,
+                                    mpc_protocol.getMyId(), mpc_protocol.getField());
 
     auto t1 = high_resolution_clock::now();
 
-    protocol.run();
-
+    // TODO: here
+    // comp_protocol.runLasso(10, lambda, rhl, Ai, bi, results);
+    
     auto t2 = high_resolution_clock::now();
 
     auto duration = duration_cast<milliseconds>(t2 - t1).count();
