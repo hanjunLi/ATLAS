@@ -514,6 +514,7 @@ buildPolyVecIndWorker(vector<FieldType>& aShares, vector<FieldType>& bShares,
 		vector< vector<FieldType> >& ASharesEval,
 		vector< vector<FieldType> >& BSharesEval,
 		int groupSize, int threadId) {
+        ZZ_p::init(ZZ((1UL << 61) -1)); // hack to init zzp
 	int totalLength = aShares.size();
 	vector<FieldType> ySharesA;   // tmp vector
 	vector<FieldType> ySharesB;   // tmp vector

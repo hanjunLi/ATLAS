@@ -160,8 +160,12 @@ void TemplateField<ZZ_p>::elementToBytes(unsigned char *elemenetInBytes,
 template <>
 void TemplateField<ZZ_p>::elementVectorToByteVector(vector<ZZ_p> &elementVector,
                                                     vector<byte> &byteVector) {
-
-  // TBD
+  int nElms = elementVector.size();
+  unsigned char* data = byteVector.data();
+  for (int i=0; i<nElms; i++) {
+    BytesFromZZ(data, rep(elementVector[i]), elementSizeInBytes);
+    data += elementSizeInBytes;
+  }
 }
 
 template <>
