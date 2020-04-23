@@ -1852,6 +1852,8 @@ template <class FieldType> void CompareGate<FieldType>::runOnline() {
 	timer->startSubTask("VerificationPhase", iteration);
 	//ONLY FOR TEST PURPOSE
 	verificationPhase();
+        if (flag_print)
+          cout << "verification finished" << endl;
 	timer->endSubTask("VerificationPhase", iteration);
 	t2 = high_resolution_clock::now();
 	duration = duration_cast<milliseconds>(t2 - t1).count();
