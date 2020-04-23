@@ -68,19 +68,26 @@ int main(int argc, char *argv[]) {
   //        << endl;
   //   cout << "end main" << '\n';
 
-  // } else if (fieldType.compare("ZpMersenne61") == 0) {
+   } 
+   else if (fieldType.compare("ZpMersenne61") == 0) {
 
-  //   ProtocolParty<ZpMersenneLongElement> protocol(argc, argv);
-  //   auto t1 = high_resolution_clock::now();
-  //   protocol.run();
-  //   auto t2 = high_resolution_clock::now();
+     ProtocolParty<ZpMersenneLongElement> mpc_protocol(argc, argv);
+    CompareGate<ZpMersenneLongElement> comp_protocol(&mpc_protocol, 64,
+                                    mpc_protocol.getMyId(), mpc_protocol.getField(), N, inp);
 
-  //   auto duration = duration_cast<milliseconds>(t2 - t1).count();
-  //   cout << "time in milliseconds for " << times << " runs: " << duration
-  //        << endl;
-  //   cout << "end main" << '\n';
+    auto t1 = high_resolution_clock::now();
 
-  // }
+    // TODO: here
+    // comp_protocol.runLasso(10, lambda, rhl, Ai, bi, results);
+  	comp_protocol.run();
+    auto t2 = high_resolution_clock::now();
+
+    auto duration = duration_cast<milliseconds>(t2 - t1).count();
+    cout << "time in milliseconds for " << times << " runs: " << duration
+         << endl;
+    cout << "end main" << '\n';
+
+   }
 
   // else if (fieldType.compare("ZpKaratsuba") == 0) {
   //   ProtocolParty<ZpKaratsubaElement> protocol(argc, argv);
@@ -106,8 +113,8 @@ int main(int argc, char *argv[]) {
   //   cout << "time in milliseconds for " << times << " runs: " << duration
   //        << endl;
   //   cout << "end main" << '\n';
-    abort();
-  }
+  //  abort();
+  //}
 
   else if (fieldType.compare("Zp") == 0) {
     ProtocolParty<ZZ_p> mpc_protocol(argc, argv);

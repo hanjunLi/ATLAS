@@ -1,7 +1,7 @@
 #! /bin/bash
 n=3
 inp=inputs.txt
-typ=Zp
+typ=ZpMersenne61
 cir=circuit.txt #comp_circuit2.txt
 pty=Parties.txt
 itr=1
