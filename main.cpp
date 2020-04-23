@@ -51,8 +51,9 @@ int main(int argc, char *argv[]) {
   auto parameters = parser.parseArguments("", argc, argv);
   int times =
       stoi(parser.getValueByKey(parameters, "internalIterationsNumber"));
-
+  int N = stoi(parser.getValueByKey(parameters, "partiesNumber"));
   string fieldType = parser.getValueByKey(parameters, "fieldType");
+  string inp = parser.getValueByKey(parameters, "inputFile");
   cout << "fieldType = " << fieldType << endl;
 
   if (fieldType.compare("ZpMersenne31") == 0) {
@@ -110,14 +111,14 @@ int main(int argc, char *argv[]) {
 
   else if (fieldType.compare("Zp") == 0) {
     ProtocolParty<ZZ_p> mpc_protocol(argc, argv);
-    CompareGate<ZZ_p> comp_protocol(&mpc_protocol, 128,
-                                    mpc_protocol.getMyId(), mpc_protocol.getField());
+    CompareGate<ZZ_p> comp_protocol(&mpc_protocol, 64,
+                                    mpc_protocol.getMyId(), mpc_protocol.getField(), N, inp);
 
     auto t1 = high_resolution_clock::now();
 
     // TODO: here
     // comp_protocol.runLasso(10, lambda, rhl, Ai, bi, results);
-    
+  	comp_protocol.run();
     auto t2 = high_resolution_clock::now();
 
     auto duration = duration_cast<milliseconds>(t2 - t1).count();

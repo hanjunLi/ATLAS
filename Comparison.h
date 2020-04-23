@@ -8,6 +8,10 @@
 #include "Interpolate.h"
 #include <vector>
 
+#define flag_print true
+
+//append B to A
+#define _append(A,B) A.insert(A.end(),B.begin(),B.end())
 template<class FieldType>
 class CompareGate 
 {
@@ -19,6 +23,7 @@ private:
 	vector<FieldType> _bitSharesValue;
 	vector<vector<FieldType> > _bitSharesBits;
 	vector<FieldType> _zeroShares;
+	vector<FieldType> chkA,chkB,chkC;
 	int _zeroShareOffset = 0;
 	int _bitShareOffset = 0;
 	//for safety, we use 12 bit floats
@@ -26,12 +31,24 @@ private:
 	int _k = 24;
 	int _m = 8;
 	int _kappa = 8;
+	int iteration;
 	int m_partyID;
 	TemplateField<FieldType> *field; // used to call some field functions
+	vector<vector<FieldType> > _Ai;
+	vector<FieldType> _bi;
+	int times; //times of rerunning
+	int n_iter; //times of iteration
+	Measurement *timer;
+	ProtocolTimer *protocolTimer;
+	string inputsFile;
 public:
-	CompareGate(ProtocolParty<FieldType> *ptr,int siz,int m_partyID,TemplateField<FieldType> *field);
+	CompareGate(ProtocolParty<FieldType> *ptr,int siz,int m_partyID,TemplateField<FieldType> *field,int n,string inputf);
 	~CompareGate();
 
+	void run();
+	void runOnline();
+	void runOffline();
+	void verificationPhase();
 	// Compgate functions
 	void getRandomBitShare(int num,vector<FieldType> &res, vector<vector<FieldType> > &bits);
 	//void genRandom01(int num,vector<vector<FieldType>> &bin,vector<FieldType> &val);
@@ -62,21 +79,36 @@ public:
 	void doubleInverse(FieldType a,FieldType &res);
 
         // TODO:
-        void readLassoInput(vector<vector<FieldType> > & Ai, vector<FieldType> &bi);
+	void readLassoInputs();
+        //void readLassoInput(vector<vector<FieldType> > & Ai, vector<FieldType> &bi);
         void runLasso(int iter,FieldType lambda, FieldType rho, vector<vector<FieldType> > & Ai, vector<FieldType> &bi, vector<FieldType> &res);
 };
 
 /////////////////////////////////////////////
 //START OF COMPAREGATE
 	template<class FieldType>
-CompareGate<FieldType>::CompareGate(ProtocolParty<FieldType> *ptr,int siz,int id,TemplateField<FieldType> *f)
+CompareGate<FieldType>::CompareGate(ProtocolParty<FieldType> *ptr,int siz,int id,TemplateField<FieldType> *f,int n,string inp)
 {
 	m_partyID = id;
 	helper = ptr;
 	_bitShareOffset=0;
 	eleSize = siz;
 	field = f;
-        // TODO: generate bit sharings in runLasso()
+	//N = n;
+	//T = (N-1)/2;
+	times = 1;
+	n_iter = 10;
+	inputsFile = inp;	
+	vector<string> subTaskNames{
+			"Offline",      "preparationPhase",  "Online",     "inputPhase",
+				"ComputePhase", "VerificationPhase", "outputPhase"};
+	this->timer = new Measurement(*helper, subTaskNames);
+//string circuitFile =
+	//		this->getParser().getValueByKey(arguments, "circuitFile");
+	//	string outputTimerFileName =
+	//		circuitFile + "Times" + to_string(m_partyId) + /*fieldType*/ + ".csv";
+		this->protocolTimer = new ProtocolTimer(times, "time_log.csv");
+        // TODO: generate bit sharings in runLasso() -> DONE: generated in preparationPhase()
 	// int numBitShares = helper->numOfCompareGates + 100;
 	// if(flag_print)
 	// 	cout<<"generating bit shares:"<<numBitShares<<endl;
@@ -131,6 +163,9 @@ int CompareGate<FieldType>::generateBitShares(int num)
 	//	helper->openShare(tot,tempShares,PlainText);
 	//now do multiplications and rule out 0 shares
 	helper->DNMultVec(tempShares,tempShares,resShares,1);
+	_append(chkA,tempShares);
+	_append(chkB,tempShares);
+	_append(chkC,resShares);
 	//if(flag_print)
 	//	cout<<"DNMult finished"<<endl;
 	helper->openShare(tot,resShares,secrets);
@@ -229,9 +264,15 @@ void CompareGate<FieldType>::compRandom(vector<FieldType> &a, vector<FieldType> 
 	//two innovations since we need to compute xy and w*(x+y-2xy)
 	//first round: compute xy
 	helper->DNMultVec(x,y,tmp,1);
+	_append(chkA,x);
+	_append(chkB,y);
+	_append(chkC,tmp);
 	for(int l=0; l<cnt; l++)
 		tmp2.push_back(x[l] + y[l] - FieldType(2) * tmp[l]);
 	helper->DNMultVec(w,tmp2,tmp3,1);
+	_append(chkA,w);
+	_append(chkB,tmp2);
+	_append(chkC,tmp3);
 	if(res.size()<cnt)
 		res.resize(cnt);
 	for(int l=0; l<cnt; l++)
@@ -441,6 +482,9 @@ void CompareGate<FieldType>::computeAnswer(vector<vector<FieldType> > &b,vector<
 		}
 	}
 	helper->DNMultVec(veca,vecb,vecres,1);
+	_append(chkA,veca);
+	_append(chkB,vecb);
+	_append(chkC,vecres);
 	//restore back to get B and C
 	vector<vector<ZZ_p> > B,C;
 	for(int l=0; l<tot; l++)
@@ -565,7 +609,7 @@ inline void CompareGate<ZZ_p>::compHalfP(vector<ZZ_p> &X, vector<ZZ_p> &dest)
 	getRandomBitShare(tot,r,rBits);
 	if(flag_print)
 		cout<<"compHalfP::Successfully get shares"<<endl;
-	if(flag_print)
+	/*if(flag_print)
 	{
 		cout<<"checking valid of bit share"<<endl;
 		vector<ZZ_p> tmp;
@@ -592,7 +636,7 @@ inline void CompareGate<ZZ_p>::compHalfP(vector<ZZ_p> &X, vector<ZZ_p> &dest)
 			{
 				cout<<"find difference:"<<tmp[i]<<","<<tmpres[i]<<endl;
 			}
-	}
+	}*/
 	//step 2: compute [c] = [x] + [r], and reveal c
 	vector<ZZ_p> resvec,tmpvec;
 	for(int i=0; i<tot; i++)
@@ -632,6 +676,9 @@ inline void CompareGate<ZZ_p>::compHalfP(vector<ZZ_p> &X, vector<ZZ_p> &dest)
 	}
 	vector<ZZ_p> tmpres;
 	helper->DNMultVec(rescr0,comp_res,tmpres,1);
+	_append(chkA,rescr0);
+	_append(chkB,comp_res);
+	_append(chkC,tmpres);
 	if(flag_print)
 		cout<<"compHalfP::Single Mult finished"<<endl;
 
@@ -884,6 +931,9 @@ void CompareGate<FieldType>::compPrefixOr(vector<vector<FieldType> > &a, vector<
 	if(flag_print)
 		cout<<"Entering helper->DNMultVec after 2nd FaninOr"<<endl;
 	helper->DNMultVec(tmpVec1,tmpVec2,G,1);
+	_append(chkA,tmpVec1);
+	_append(chkB,tmpVec2);
+	_append(chkC,G);
 	bas = 0;
 	bastot = 0;
 	bassiz = 0;
@@ -945,7 +995,9 @@ void CompareGate<FieldType>::compPrefixOr(vector<vector<FieldType> > &a, vector<
 		bassiz += groupSize[l];
 	}
 	helper->DNMultVec(tmpVec1,tmpVec2,S,1);
-
+	_append(chkA,tmpVec1);
+	_append(chkB,tmpVec2);
+	_append(chkC,S);
 	bastot = 0;
 	bas = 0;
 	if(res.size()<_cnt)
@@ -1024,6 +1076,9 @@ void CompareGate<FieldType>::compFanInOr(int num,vector<vector<FieldType> >&a, v
 	//if(flag_print)
 	//	cout<<"helper->DNMultVec"<<endl;
 	helper->DNMultVec(Avec,tmpc,C,1);
+	_append(chkA,Avec);
+	_append(chkB,tmpc);
+	_append(chkC,C);
 	//if(flag_print)
 	//	cout<<"fanInOr:helper->openShare(C):"<<C.size()<<endl;
 	helper->openShare(tot,C,Cres);
@@ -1121,6 +1176,9 @@ void CompareGate<FieldType>::getRandomInvPairs(int num, vector<FieldType> &b, ve
 	if(flag_print)
 		cout<<"genInv:DNMult,size:"<<bp.size()<<","<<b.size()<<endl;
 	helper->DNMultVec(b,bp,B,1);
+	_append(chkA,b);
+	_append(chkB,bp);
+	_append(chkC,B);
 	if(flag_print)
 		cout<<"genInv:helper->openShare,size:"<<B.size()<<endl;
 	helper->openShare(2*num-1,B,Bres);
@@ -1258,6 +1316,9 @@ void CompareGate<FieldType>::doubleVecMult(vector<FieldType> &a,vector<FieldType
 	vector<FieldType> tmp;
 	//step 1: normal product
 	helper->DNMultVec(a,b,tmp,1);
+	_append(chkA,a);
+	_append(chkB,b);
+	_append(chkC,tmp);
 	//step 2: do trunc
 	TruncPR(tmp,res);
 }
@@ -1301,9 +1362,15 @@ inline void CompareGate<ZZ_p>::SoftThres(vector<ZZ_p> &thres,vector<ZZ_p> &a,vec
 	}
 	//notice res1 and res2 are 0 ot 1 (without 2^-k)
 	helper->DNMultVec(res1,res2,tmp3,1);
+	_append(chkA,res1);
+	_append(chkB,res2);
+	_append(chkC,tmp3);
 	if(flag_print)
 		cout<<"end of mult1"<<endl;
 	helper->DNMultVec(tmp3, a, add3, 1); 
+	_append(chkA,tmp3);
+	_append(chkB,a);
+	_append(chkC,add3);
 	if(flag_print)
 		cout<<"end of mult2"<<endl;
 	for(int i=0; i<tot; i++)
@@ -1376,121 +1443,120 @@ inline void CompareGate<ZZ_p>::runLasso(int iter,ZZ_p lambda, ZZ_p rho, vector<v
 	// Ai
 	if(flag_print)
 		cout<<"Lasso:step 1:"<<endl;
-	// for(int l1=0; l1<dim; l1++)
-	// 	for(int l2=0; l2<dim; l2++)
-	// 	{
-	// 		// get the expected sizes from the other parties
+	 for(int l1=0; l1<dim; l1++)
+	 	for(int l2=0; l2<dim; l2++)
+	 	{
+	 		// get the expected sizes from the other parties
 
-	// 		// the value of a_0 is the input of the party.
-	// 		x1[0] = Ai[l1][l2]; //field->GetElement(Ai[l1][l2]);
+	 		// the value of a_0 is the input of the party.
+	 		x1[0] = Ai[l1][l2]; //field->GetElement(Ai[l1][l2]);
 
-	// 		// generate random degree-T polynomial
-	// 		for (int i = 1; i < T + 1; i++) {
-	// 			// A random field element, uniform distribution
-	// 			x1[i] = field->Random();
-	// 		}
+	 		// generate random degree-T polynomial
+	 		for (int i = 1; i < T + 1; i++) {
+	 			// A random field element, uniform distribution
+	 			x1[i] = field->Random();
+	 		}
 
-	// 		helper->matrix_vand.MatrixMult(x1, y1, T + 1);
+	 		helper->matrix_vand.MatrixMult(x1, y1, T + 1);
 
-	// 		// prepare shares to be sent
-	// 		for (int i = 0; i < N; i++) {
-	// 			sendBufsElements[i].push_back(y1[i]);
-	// 		}
-	// 	} 
-	// //bi
-	// for(int l1=0; l1<dim; l1++)
-	// {
-	// 	// get the expected sizes from the other parties
+	 		// prepare shares to be sent
+	 		for (int i = 0; i < N; i++) {
+	 			sendBufsElements[i].push_back(y1[i]);
+	 		}
+	 	} 
+	 //bi
+	 for(int l1=0; l1<dim; l1++)
+	 {
+	 	// get the expected sizes from the other parties
 
-	// 	// the value of a_0 is the input of the party.
-	// 	x1[0] = bi[l1]; //field->GetElement(bi[l1]);
+	 	// the value of a_0 is the input of the party.
+	 	x1[0] = bi[l1]; //field->GetElement(bi[l1]);
 
-	// 	// generate random degree-T polynomial
-	// 	for (int i = 1; i < T + 1; i++) {
-	// 		// A random field element, uniform distribution
-	// 		x1[i] = field->Random();
-	// 	}
+	 	// generate random degree-T polynomial
+	 	for (int i = 1; i < T + 1; i++) {
+	 		// A random field element, uniform distribution
+	 		x1[i] = field->Random();
+	 	}
 
-	// 	helper->matrix_vand.MatrixMult(x1, y1, T + 1);
+	 	helper->matrix_vand.MatrixMult(x1, y1, T + 1);
 
-	// 	// prepare shares to be sent
-	// 	for (int i = 0; i < N; i++) {
-	// 		sendBufsElements[i].push_back(y1[i]);
-	// 	}
-	// }
-	// //w,u (initied to 0)
-	// for(int l1=0; l1<2*dim; l1++)
-	// {
-	// 	// get the expected sizes from the other parties
+	 	// prepare shares to be sent
+	 	for (int i = 0; i < N; i++) {
+	 		sendBufsElements[i].push_back(y1[i]);
+	 	}
+	 }
+	 //w,u (initied to 0)
+	 for(int l1=0; l1<2*dim; l1++)
+	 {
+	 	// get the expected sizes from the other parties
 
-	// 	// the value of a_0 is the input of the party.
-	// 	x1[0] = ZZ_p(0); //field->GetElement(0);
+	 	// the value of a_0 is the input of the party.
+	 	x1[0] = ZZ_p(0); //field->GetElement(0);
 
-	// 	// generate random degree-T polynomial
-	// 	for (int i = 1; i < T + 1; i++) {
-	// 		// A random field element, uniform distribution
-	// 		x1[i] = field->Random();
-	// 	}
+	 	// generate random degree-T polynomial
+	 	for (int i = 1; i < T + 1; i++) {
+	 		// A random field element, uniform distribution
+	 		x1[i] = field->Random();
+	 	}
 
-	// 	helper->matrix_vand.MatrixMult(x1, y1, T + 1);
-
-	// 	// prepare shares to be sent
-	// 	for (int i = 0; i < N; i++) {
-	// 		sendBufsElements[i].push_back(y1[i]);
-	// 	}
-	// }
+	 	helper->matrix_vand.MatrixMult(x1, y1, T + 1);
+ 	// prepare shares to be sent
+	 	for (int i = 0; i < N; i++) {
+	 		sendBufsElements[i].push_back(y1[i]);
+	 	}
+	 }
 	int zero_cnt = 50000;
-	// if(m_partyID==0) //z
-	// {
-	// 	if(flag_print)
-	// 		cout<<"find ID 0"<<endl;
-	// 	for(int l1=0; l1<dim + zero_cnt; l1++)
-	// 	{
-	// 		// get the expected sizes from the other parties
+	 if(m_partyID==0) //z
+	 {
+	 	if(flag_print)
+	 		cout<<"find ID 0"<<endl;
+	 	for(int l1=0; l1<dim + zero_cnt; l1++)
+	 	{
+	 		// get the expected sizes from the other parties
 
-	// 		// the value of a_0 is the input of the party.
-	// 		x1[0] = ZZ_p(0); //field->GetElement(0);
+	 		// the value of a_0 is the input of the party.
+	 		x1[0] = ZZ_p(0); //field->GetElement(0);
 
-	// 		// generate random degree-T polynomial
-	// 		for (int i = 1; i < T + 1; i++) {
-	// 			// A random field element, uniform distribution
-	// 			x1[i] = field->Random();
-	// 		}
+	 		// generate random degree-T polynomial
+	 		for (int i = 1; i < T + 1; i++) {
+	 			// A random field element, uniform distribution
+	 			x1[i] = field->Random();
+	 		}
 
-	// 		helper->matrix_vand.MatrixMult(x1, y1, T + 1);
+	 		helper->matrix_vand.MatrixMult(x1, y1, T + 1);
 
-	// 		// prepare shares to be sent
-	// 		for (int i = 0; i < N; i++) {
-	// 			sendBufsElements[i].push_back(y1[i]);
-	// 		}
-	// 	}
-	// }
-	// for(int i=1; i<N; i++)
-	// 	sizes[i] = dim*(dim+3);
-	// sizes[0] = dim*(dim+4) + zero_cnt;
-	// // -- convert shares to bytes
-	// for (int i = 0; i < N; i++) {
-	// 	sendBufsBytes[i].resize(sendBufsElements[i].size() * fieldByteSize);
-	// 	recBufBytes[i].resize(sizes[i] * fieldByteSize);
-	// 	for (int j = 0; j < sendBufsElements[i].size(); j++) {
-	// 		field->elementToBytes(sendBufsBytes[i].data() + (j * fieldByteSize),
-	// 				sendBufsElements[i][j]);
-	// 	}
-	// }
+	 		// prepare shares to be sent
+	 		for (int i = 0; i < N; i++) {
+	 			sendBufsElements[i].push_back(y1[i]);
+	 		}
+	 	}
+	 }
+	 for(int i=1; i<N; i++)
+	 	sizes[i] = dim*(dim+3);
+	 sizes[0] = dim*(dim+4) + zero_cnt;
+	 // -- convert shares to bytes
+	 for (int i = 0; i < N; i++) {
+	 	sendBufsBytes[i].resize(sendBufsElements[i].size() * fieldByteSize);
+	 	recBufBytes[i].resize(sizes[i] * fieldByteSize);
+	 	for (int j = 0; j < sendBufsElements[i].size(); j++) {
+	 		field->elementToBytes(sendBufsBytes[i].data() + (j * fieldByteSize),
+	 				sendBufsElements[i][j]);
+	 	}
+	 }
 
-	// if(flag_print)
-	// 	cout<<"before round"<<endl;
-	// helper->roundFunctionSync(sendBufsBytes, recBufBytes, 1);
-	// if(flag_print)
-	// 	cout<<"after round"<<endl;
-	// // -- convert received bytes to shares
-	// for (int i = 0; i < N; i++) {
-	// 	recBufElements[i].resize(sizes[i]);    
-	// 	for (int j = 0; j < sizes[i]; j++) {
-	// 		recBufElements[i][j] =
-	// 			field->bytesToElement(recBufBytes[i].data() + (j * fieldByteSize));
-	// 	}
-	// }	
+	 if(flag_print)
+	 	cout<<"before round"<<endl;
+	 helper->roundFunctionSync(sendBufsBytes, recBufBytes, 1);
+	 if(flag_print)
+	 	cout<<"after round"<<endl;
+	 // -- convert received bytes to shares
+	 for (int i = 0; i < N; i++) {
+	 	recBufElements[i].resize(sizes[i]);    
+	 	for (int j = 0; j < sizes[i]; j++) {
+	 		recBufElements[i][j] =
+	 			field->bytesToElement(recBufBytes[i].data() + (j * fieldByteSize));
+	 	}
+	 }	
 	if(flag_print)
 		cout<<"received"<<endl;
 	//receive shares of other parties
@@ -1645,5 +1711,149 @@ inline void CompareGate<ZZ_p>::runLasso(int iter,ZZ_p lambda, ZZ_p rho, vector<v
 		res[i] = shareOfZ[i];
 	if(flag_print)
 		cout<<"Used zero:"<<_zeroShareOffset<<"/"<<zero_cnt<<endl;
+}
+
+template <class FieldType> void CompareGate<FieldType>::readLassoInputs()
+{
+	if(flag_print)
+		cout<<"Reading lasso"<<endl;
+	ifstream myfile;
+	myfile.open(inputsFile);
+	int n; myfile>>n;
+	if(flag_print)
+		cout<<"Read "<<n<<endl;
+	//read Ai
+	_Ai.resize(n);
+	for(int i=0; i<n; i++)
+		for(int j=0; j<n; j++)
+		{
+			long tmp;
+			myfile>>tmp;
+			if(flag_print)
+				cout<<"Read "<<tmp<<","<<FieldType(tmp)<<endl;
+			_Ai[i].push_back(FieldType(tmp));
+		}
+	//read Bi
+	for(int i=0; i<n; i++)
+	{
+		long tmp;
+		myfile>>tmp;
+		if(flag_print)
+			cout<<"Read "<<tmp<<endl;
+		_bi.push_back(FieldType(tmp));
+	}
+	myfile.close();
+	if(flag_print)
+		cout<<"Reading lasso ended"<<endl;
+}
+
+template <class FieldType> void CompareGate<FieldType>::run() {
+	int tottme = 0;
+	if(flag_print)
+		cout<<"comparegate::running"<<endl;
+	for (iteration = 0; iteration < times; iteration++) {
+
+		auto t1start = high_resolution_clock::now();
+		timer->startSubTask("Offline", iteration);
+		runOffline();
+		timer->endSubTask("Offline", iteration);
+		timer->startSubTask("Online", iteration);
+		runOnline();
+		timer->endSubTask("Online", iteration);
+		auto t2end = high_resolution_clock::now();
+
+		auto duration = duration_cast<milliseconds>(t2end - t1start).count();
+		protocolTimer->totalTimeArr[iteration] = duration;
+		tottme += duration;
+	}
+	cout<<"Total time:"<<tottme<<endl;
+	// cout<<"Gates:"<<numOfMultGates + numOfCompareGates<<endl;
+	// cout<<"Ave time:"<<(double)tottme / times / (numOfMultGates + numOfCompareGates);
+}
+
+template <class FieldType> void CompareGate<FieldType>::runOffline() {
+	if(flag_print)
+		cout<<"runOffline()"<<endl;
+	auto t1 = high_resolution_clock::now();
+	timer->startSubTask("preparationPhase", iteration);
+	readLassoInputs();
+	int dim = _Ai.size();
+	int cnt = dim * dim * 100 * n_iter * eleSize;
+	if(flag_print)
+		cout<<"Entering helper->preparation"<<endl;
+	if (helper->preparationPhase(cnt) == false) {
+		if (flag_print) {
+			cout << "preparationPhase failed" << '\n';
+		}
+		return;
+	} else {
+		if (flag_print) {
+			cout << "finish Preparation Phase" << '\n';
+		}
+	}
+	int cnt_bit = n_iter * 3;
+	generateBitShares(cnt_bit);
+	timer->endSubTask("preparationPhase", iteration);
+	auto t2 = high_resolution_clock::now();
+
+	auto duration = duration_cast<milliseconds>(t2 - t1).count();
+	protocolTimer->preparationPhaseArr[iteration] = duration;
+}
+
+template <class FieldType> void CompareGate<FieldType>::runOnline() {
+
+	auto t1 = high_resolution_clock::now();
+	//timer->startSubTask("inputPhase", iteration);
+	//inputPhase();
+	//timer->endSubTask("inputPhase", iteration);
+	auto t2 = high_resolution_clock::now();
+
+	auto duration = duration_cast<milliseconds>(t2 - t1).count();
+	protocolTimer->inputPreparationArr[iteration] = duration;
+
+	t1 = high_resolution_clock::now();
+	vector<FieldType> res;
+	timer->startSubTask("ComputePhase", iteration);
+	runLasso(n_iter, FieldType(1ll<<(_k-1)), FieldType(1ll<<(_k-1)), _Ai, _bi, res);
+	timer->endSubTask("ComputePhase", iteration);
+	t2 = high_resolution_clock::now();
+
+	duration = duration_cast<milliseconds>(t2 - t1).count();
+	protocolTimer->computationPhaseArr[iteration] = duration;
+
+	t1 = high_resolution_clock::now();
+	timer->startSubTask("VerificationPhase", iteration);
+	//ONLY FOR TEST PURPOSE
+	verificationPhase();
+	timer->endSubTask("VerificationPhase", iteration);
+	t2 = high_resolution_clock::now();
+	duration = duration_cast<milliseconds>(t2 - t1).count();
+	protocolTimer->verificationPhaseArr[iteration] = duration;
+
+	t1 = high_resolution_clock::now();
+	timer->startSubTask("outputPhase", iteration);
+	//outputPhase();
+	timer->endSubTask("outputPhase", iteration);
+	t2 = high_resolution_clock::now();
+
+	duration = duration_cast<milliseconds>(t2 - t1).count();
+	protocolTimer->outputPhaseArr[iteration] = duration;
+}
+
+template<class FieldType>
+void CompareGate<FieldType>::verificationPhase()
+{
+	FieldType l = helper->randomCoin();
+	FieldType r = l;
+	FieldType c(0);
+	if(flag_print)
+		cout<<"# of checking mults:"<<chkA.size()<<endl;
+	for(int i=0; i<chkA.size(); i++)
+	{
+		chkA[i] = chkA[i] * r;
+		c += chkC[i] * r;
+		r = r * l;
+	}
+	helper->compressVerifyVec(chkA,chkB,c);
 }
 #endif /* COMPARISON_H_ */

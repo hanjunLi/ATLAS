@@ -25,7 +25,7 @@
 // #include "Comparison.h"
 #include <cmath>
 
-#define flag_print false
+#define flag_print true
 #define flag_print_output false
 
 using namespace std;
@@ -109,7 +109,7 @@ class ProtocolParty : public Protocol, public HonestMajority, MultiParty {
 
 		void run() override;
 		void runOffline() override;
-		bool preparationPhase();
+		bool preparationPhase(int _cnt = 0);
 		void offlineDNForMultiplication(int numOfDoubleShares);
 
 		void runOnline() override;
@@ -1168,7 +1168,7 @@ void ProtocolParty<FieldType>::initializationPhase() {
 	this->matrix_vand_transpose.InitVDMTranspose();
 }
 
-template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
+template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase(int tcnt) {
 	// ---- # of random single shares:
 	// 1. Generating AES keys and verification
 	//    [keySize + verifyIterations]
@@ -1193,7 +1193,7 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
                 4 * (keySize + verifyIterations) + 2 * _K + nCompressions + 2;
 		// + 60 * eleSize *numOfCompareGates;
 	//cout<<"should have num:"<<numSingleShares<<endl;
-	numSingleShares += 100000;
+	numSingleShares += tcnt;
 	_singleSharesOffset = 0;
 	if(flag_print)
 		cout<<"Generating single Share"<<endl;
@@ -1210,7 +1210,7 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
                 this->numOfMultGates + (nCompressions+1)*_K*2;
         // + 100 * eleSize * this->numOfCompareGates;
 	//used for Lasso?
-	numDoubleShares += 100000;
+	numDoubleShares += tcnt;
 	_doubleSharesOffset = 0;
 	offlineDNForMultiplication(numDoubleShares);
 
