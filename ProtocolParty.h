@@ -613,7 +613,9 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
 	} // else : recursive case:
 	// -- divide into K groups
 	int groupSize = (totalLength + _K -1 )/ _K;
-
+        aShares.resize( groupSize * _K, field->GetElement(0) );
+        bShares.resize( groupSize * _K, field->GetElement(0) );
+        totalLength = groupSize * _K;
 	// cout << "---- cur groupSize: " << groupSize << endl;
 
 	// -- one DN mult for each group i to compute   
@@ -627,8 +629,6 @@ compressVerifyVec(vector<FieldType>& aShares, vector<FieldType>& bShares,
 	for (int i = 0; i< _K - 1; i++) {
 		dShares[_K-1] = dShares[_K-1] - dShares[i];
 	}
-	aShares.resize( groupSize * _K, field->GetElement(0) );
-	bShares.resize( groupSize * _K, field->GetElement(0) );
 	buildPolyVecInd(aShares, bShares, dShares, groupSize);
 	if(flag_print)
 		cout<<"Ind built"<<endl;
