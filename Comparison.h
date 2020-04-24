@@ -8,8 +8,6 @@
 #include "Interpolate.h"
 #include <vector>
 
-#define flag_print true
-
 //append B to A
 #define _append(A,B) A.insert(A.end(),B.begin(),B.end())
 template<class FieldType>
@@ -86,11 +84,6 @@ class CompareGate
 
 /////////////////////////////////////////////
 //START OF COMPAREGATE
-
-	template<class FieldType>
-long CompareGate<FieldType>::transElement(FieldType tmp)
-{
-}
 
 	template<>
 inline long CompareGate<ZpMersenneLongElement>::transElement(ZpMersenneLongElement tmp)
@@ -1484,137 +1477,39 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	vector<FieldType> shareOfZ;
 	// -- prepare the shares for the input
 	// also need to prepare shares for P and P/2
-	int index = 0;
-	//vector<int> sizes(N);
-	//before start: send shares of Ai and bi to other parties.
-	//Since Ai and bi are plaintext, we need to generate corresponding shares
-	vector<FieldType> x1(N), y1(N);
-	vector<vector<FieldType>> sendBufsElements(N);
-	vector<vector<byte>> sendBufsBytes(N);
-	vector<vector<byte>> recBufBytes(N);
-	vector<vector<FieldType>> recBufElements(N); 
-	vector<int> sizes(N);
 	//step 1: send and receive shares of Ai, bi, w, z and u 
-
-	// Ai
 	if(flag_print)
 		cout<<"Lasso:step 1:"<<endl;
-	for(int l1=0; l1<dim; l1++)
-		for(int l2=0; l2<dim; l2++)
-		{
-			// get the expected sizes from the other parties
 
-			// the value of a_0 is the input of the party.
-			x1[0] = Ai[l1][l2]; //field->GetElement(Ai[l1][l2]);
-
-			// generate random degree-T polynomial
-			for (int i = 1; i < T + 1; i++) {
-				// A random field element, uniform distribution
-				x1[i] = field->Random();
-			}
-
-			helper->matrix_vand.MatrixMult(x1, y1, T + 1);
-
-			// prepare shares to be sent
-			for (int i = 0; i < N; i++) {
-				sendBufsElements[i].push_back(y1[i]);
-			}
-		} 
-	//bi
-	for(int l1=0; l1<dim; l1++)
-	{
-		// get the expected sizes from the other parties
-
-		// the value of a_0 is the input of the party.
-		x1[0] = bi[l1]; //field->GetElement(bi[l1]);
-
-		// generate random degree-T polynomial
-		for (int i = 1; i < T + 1; i++) {
-			// A random field element, uniform distribution
-			x1[i] = field->Random();
-		}
-
-		helper->matrix_vand.MatrixMult(x1, y1, T + 1);
-
-		// prepare shares to be sent
-		for (int i = 0; i < N; i++) {
-			sendBufsElements[i].push_back(y1[i]);
-		}
-	}
-	//w,u (initied to 0)
-	for(int l1=0; l1<2*dim; l1++)
-	{
-		// get the expected sizes from the other parties
-
-		// the value of a_0 is the input of the party.
-		x1[0] = field->GetElement(0);
-
-		// generate random degree-T polynomial
-		for (int i = 1; i < T + 1; i++) {
-			// A random field element, uniform distribution
-			x1[i] = field->Random();
-		}
-
-		helper->matrix_vand.MatrixMult(x1, y1, T + 1);
-		// prepare shares to be sent
-		for (int i = 0; i < N; i++) {
-			sendBufsElements[i].push_back(y1[i]);
-		}
-	}
-	int zero_cnt = 50000;
-	if(m_partyID==0) //z
-	{
-		if(flag_print)
-			cout<<"find ID 0"<<endl;
-		for(int l1=0; l1<dim + zero_cnt; l1++)
-		{
-			// get the expected sizes from the other parties
-
-			// the value of a_0 is the input of the party.
-			x1[0] = field->GetElement(0);
-
-			// generate random degree-T polynomial
-			for (int i = 1; i < T + 1; i++) {
-				// A random field element, uniform distribution
-				x1[i] = field->Random();
-			}
-
-			helper->matrix_vand.MatrixMult(x1, y1, T + 1);
-
-			// prepare shares to be sent
-			for (int i = 0; i < N; i++) {
-				sendBufsElements[i].push_back(y1[i]);
-			}
-		}
-	}
-	for(int i=1; i<N; i++)
-		sizes[i] = dim*(dim+3);
-	sizes[0] = dim*(dim+4) + zero_cnt;
-	// -- convert shares to bytes
-	for (int i = 0; i < N; i++) {
-		sendBufsBytes[i].resize(sendBufsElements[i].size() * fieldByteSize);
-		recBufBytes[i].resize(sizes[i] * fieldByteSize);
-		for (int j = 0; j < sendBufsElements[i].size(); j++) {
-			field->elementToBytes(sendBufsBytes[i].data() + (j * fieldByteSize),
-					sendBufsElements[i][j]);
-		}
-	}
-
-	if(flag_print)
-		cout<<"before round"<<endl;
-	helper->roundFunctionSync(sendBufsBytes, recBufBytes, 1);
-	if(flag_print)
-		cout<<"after round"<<endl;
+        // send input: flat(Ai) || bi || u (= 0) || w (= 0)
+        int sendSize = dim*dim + dim*3;
+        vector<vector<FieldType>> sendBufsElements;
+        vector<FieldType> sendElems(sendSize, field->GetElement(0));
+        for (int l1 = 0; l1<dim; l1++) {
+          for (int l2 = 0; l2<dim; l2++) {
+            sendElems[ l1*dim + l2 ] = Ai[l1][l2]; //
+          }
+          sendElems[dim * dim + l1] = bi[l1];
+        }
+        helper->makeTShares(sendElems, sendBufsElements);
+        vector<vector<byte>> sendBufsBytes(N, vector<byte>(sendSize*fieldByteSize));
+        for (int i=0; i<N; i++) {
+          field->elementVectorToByteVector(sendBufsElements[i], sendBufsBytes[i]);
+        }
+        vector<vector<byte>> recBufBytes(N, vector<byte>(sendSize*fieldByteSize));
+        helper->_comm.allToAll(sendBufsBytes, recBufBytes);
 	// -- convert received bytes to shares
+        vector<vector<FieldType>> recBufElements(N, vector<FieldType>(sendSize));
 	for (int i = 0; i < N; i++) {
-		recBufElements[i].resize(sizes[i]);    
-		for (int j = 0; j < sizes[i]; j++) {
+		for (int j = 0; j < sendSize; j++) {
 			recBufElements[i][j] =
 				field->bytesToElement(recBufBytes[i].data() + (j * fieldByteSize));
 		}
 	}	
 	if(flag_print)
 		cout<<"received"<<endl;
+
+
 	//receive shares of other parties
 	vector<FieldType> _chk;
 	for(int i=0; i<N; i++) //each
@@ -1645,23 +1540,34 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 		shareOfU[i].resize(dim);
 		for(int l=0; l<dim; l++)
 			shareOfU[i][l] = recBufElements[i][_tot++];
-		//Z
-		if(i==0)
-		{
-			shareOfZ.resize(dim);
-			for(int l=0; l<dim; l++)
-				shareOfZ[l] = recBufElements[i][_tot++];
-			_zeroShares.resize(zero_cnt);
-			for(int l=0; l<zero_cnt; l++)
-				_zeroShares[l] = recBufElements[i][_tot++];
-			if(flag_print)
-			{
-				cout<<"opening zero:"<<endl;
-				helper->openShare(zero_cnt,_zeroShares,_chk);
-			}
-		}
 	}
+        if(flag_print) {
+          cout << "sending zero shares" << endl;
+        }
+        //Z shares: just set to 0
+        shareOfZ.resize(dim, *(field->GetZero()));
+        //zero shares: TODO: remove if zero shares are not used?
+        int zero_cnt = 50000;
+        vector<vector<byte>> sendSharesByte;
+        if (m_partyID == 0) {
+          vector<FieldType> zeros(zero_cnt, *(field->GetZero()));
+          vector<vector<FieldType>> fullSharesVec;
+          helper->makeTShares(zeros, fullSharesVec);
+          sendSharesByte.resize(N, vector<byte>(zero_cnt * fieldByteSize));
+          for (int i=0; i<N; i++) {
+            field->elementVectorToByteVector(fullSharesVec[i], sendSharesByte[i]);
+          }
+        }
+        vector<byte> zeroSharesByte(zero_cnt * fieldByteSize);
+        helper->_comm.oneToAll(zeroSharesByte, sendSharesByte, 0);
+        if(flag_print) {
+          cout << "received zero shares" << endl;
+        }
 
+        _zeroShares.resize(zero_cnt);
+        for (int i=0; i<zero_cnt; i++) {
+          _zeroShares[i] = field->bytesToElement(zeroSharesByte.data() + i * fieldByteSize);
+        }
 
 	//the following are double number testing
 	/*if(flag_print)
@@ -1832,7 +1738,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	//cnt *= 20;
 	if(flag_print)
 		cout<<"Entering helper->preparation"<<endl;
-	if (helper->preparationPhase(cnt) == false) {
+	if (helper->preparationPhase(cnt, cnt) == false) {
 		if (flag_print) {
 			cout << "preparationPhase failed" << '\n';
 		}
