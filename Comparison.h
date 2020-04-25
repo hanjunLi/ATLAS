@@ -20,9 +20,9 @@ class CompareGate
 		vector<vector<FieldType> > OrVector; //the share of coefficients of fan-in Or function
 		vector<FieldType> _bitSharesValue;
 		vector<vector<FieldType> > _bitSharesBits;
-		vector<FieldType> _zeroShares;
+		//vector<FieldType> _zeroShares;
 		vector<FieldType> chkA,chkB,chkC;
-		int _zeroShareOffset = 0;
+		//int _zeroShareOffset = 0;
 		int _bitShareOffset = 0;
 		//for safety, we use 12 bit floats
 		//fixed-point floats, 4 decimals
@@ -774,11 +774,11 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 			bits[suc][j] = 0;
 			//bits[suc][j] = _zeroShares[_zeroShareOffset++];
 			//res[suc] = res[suc] * FieldType(2) + bits[suc][j];
-			if(_zeroShareOffset >= _zeroShares.size())
+			/*if(_zeroShareOffset >= _zeroShares.size())
 			{
 				cout<<"not enough zero shares"<<endl;
 				abort();
-			}
+			}*/
 		}
 		for(int j=3; j<eleSize && _bitShareOffset < _bitSharesValue.size(); j++)
 		{
@@ -1547,7 +1547,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
         //Z shares: just set to 0
         shareOfZ.resize(dim, *(field->GetZero()));
         //zero shares: TODO: remove if zero shares are not used?
-        int zero_cnt = 50000;
+        /*int zero_cnt = 50000;
         vector<vector<byte>> sendSharesByte;
         if (m_partyID == 0) {
           vector<FieldType> zeros(zero_cnt, *(field->GetZero()));
@@ -1568,6 +1568,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
         for (int i=0; i<zero_cnt; i++) {
           _zeroShares[i] = field->bytesToElement(zeroSharesByte.data() + i * fieldByteSize);
         }
+		*/
 
 	//the following are double number testing
 	/*if(flag_print)
@@ -1665,8 +1666,8 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 		res.resize(dim);
 	for(int i=0; i<dim; i++)
 		res[i] = shareOfZ[i];
-	if(flag_print)
-		cout<<"Used zero:"<<_zeroShareOffset<<"/"<<zero_cnt<<endl;
+	//if(flag_print)
+	//	cout<<"Used zero:"<<_zeroShareOffset<<"/"<<zero_cnt<<endl;
 }
 
 template <class FieldType> void CompareGate<FieldType>::readLassoInputs()
