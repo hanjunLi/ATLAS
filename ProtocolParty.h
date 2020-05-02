@@ -241,6 +241,8 @@ makeRandShares(int nRands, vector<FieldType> &randShares) {
   for (int i=0; i<nBuckets; i++) {
     secrets[i] = _field->Random();
   }
+  if(flag_print)
+	  cout<<"An example of secret:"<<secrets[0]<<endl;
   vector<vector<FieldType>> randSharesAll(_N, vector<FieldType>(nBuckets));
   makeTShares(secrets, randSharesAll);
 
@@ -332,6 +334,9 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
     _field = new TemplateField<FieldType>(8);
   } else if (fieldType.compare("Zp") == 0) {
     _field = new TemplateField<FieldType>((1UL << 61) -1);
+  } else if (fieldType.compare("ZpMersenne127")==0)
+  {
+	  _field = new TemplateField<FieldType>(0);
   }
   string circuitFile =
     this->getParser().getValueByKey(arguments, "circuitFile");

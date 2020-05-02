@@ -6,6 +6,16 @@
 #include "ZpKaratsubaElement.h"
 
 using namespace NTL;
+/*template <> 
+ZpMersenne127Element TemplateField<ZpMersenne127Element>::Random()
+{
+	cout<<"Yes!"<<endl;
+	auto tmp = prg.getRandom128();
+	__uint128_t t0 = tmp[0];
+	t0 = (t0 << 64) + tmp[1];
+	t0 = t0 >> 1;
+	return ZpMersenne127Element(t0);
+}*/
 
 template <> TemplateField<ZZ_p>::TemplateField(long fieldParam) {
 
