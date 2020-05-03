@@ -106,6 +106,9 @@ for _ in range(nIter):
     z = soft_thresh(param_lamb/nParties/param_rho, (sum(ws)+sum(us))/nParties)
     # c: ui = ui + wi - z
     us = [us[i] + ws[i] - z for i in range(nParties)]
+    print("value of w",ws)
+    print("value of z",z)
+    print("value of us",us)
 
 
 for _ in range(z.shape[0]):

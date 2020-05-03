@@ -1521,7 +1521,7 @@ void CompareGate<FieldType>::doubleInverse(FieldType a,FieldType &res)
 	  inline void CompareGate<ZZ_p>::doubleInverse(ZZ_p a,ZZ_p &res)
 	 */
 {
-	long bas(1ll<<_m);
+	long bas(1ll<<(2*_m));
 	long r = bas / transElement(a);
 	res = r;
 	if(flag_print)
@@ -1533,7 +1533,8 @@ void CompareGate<FieldType>::doubleInverse(FieldType a,FieldType &res)
 template<>
 inline void CompareGate<ZpMersenne127Element>::doubleInverse(ZpMersenne127Element a, ZpMersenne127Element &res)
 {
-	__uint128_t bas(1ll<<_m);
+	__uint128_t bas(((__uint128_t)1)<<(2*_m));
+	if(flag_print) cout<<"bas at doubleInverse:"<<ZpMersenne127Element(bas)<<endl;
 	res = ZpMersenne127Element(bas / a.elem);
 }
 
@@ -1545,13 +1546,13 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	  inline void CompareGate<ZZ_p>::runLasso(int iter,ZZ_p lambda, ZZ_p rho, vector<vector<ZZ_p> > & Ai, vector<ZZ_p> &bi, vector<ZZ_p> &res)
 	 */
 {
-	int dim = Ai.size(); //Ai: dim * dim matrix, bi: dim * 1 vector
+	const int dim = Ai.size(); //Ai: dim * dim matrix, bi: dim * 1 vector
 	int N = helper->getN();
 	int T = helper->getT();
 	int fieldByteSize = eleSize / 8; //field->getElementSizeInBytes();	
 	FieldType invN,invrho;
 	FieldType ZN(N);
-	doubleInverse(ZN,invN);
+	doubleInverse(ZN * field->GetElement(1ull<<_m),invN);
 	doubleInverse(rho,invrho);
 	if(flag_print)
 		cout<<"InvN:"<<N<<","<<invN<<endl;
@@ -1690,7 +1691,13 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	for(int _t=0; _t<iter; _t++)
 	{
 		if(flag_print)
-			cout<<"Iteration "<<_t<<endl;
+		{
+			cout<<"Iteration "<<_t<<", value of z:"<<endl;
+			vector<FieldType> _tmp;
+			helper->openShare(dim,shareOfZ,_tmp);
+			for(int i=0; i<dim; i++)
+				cout<<_tmp[i];
+		}
 		//step 4(a)
 		for(int i=0; i<N; i++) //repeat with each w[i]
 		{
@@ -1719,7 +1726,8 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 		}
 		if(flag_print)
 		{
-			cout<<"w before 4(b):"<<endl;
+			cout<<"dim:"<<dim<<endl;
+			cout<<"w[0] before 4(b):"<<endl;
 			vector<FieldType> _r0;
 			helper->openShare(dim,shareOfW[0],_r0);
 			for(int i=0; i<dim; i++)
@@ -1755,6 +1763,8 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 		SoftThres(_t12, _t00, shareOfZ);
 		if(flag_print)
 		{
+			cout<<"invN,invrho,rho,lambda:"<<endl;
+			cout<<invN<<invrho<<rho<<lambda<<endl;
 			vector<FieldType> _r0,_r1,_r2;
 			helper->openShare(dim,_t12,_r0);
 			helper->openShare(dim,_t00,_r1);
@@ -1887,7 +1897,7 @@ template <class FieldType> void CompareGate<FieldType>::runOnline() {
 	vector<FieldType> res;
 	timer->startSubTask("ComputePhase", iteration);
 	//rho = 10, lambda = 0.1
-	runLasso(n_iter, field->GetElement((1ll<<(_k))/10), field->GetElement(10 * 1ll<<(_k)), _Ai, _bi, res);
+	runLasso(n_iter, field->GetElement((1ull<<(_m))/10), field->GetElement(10 * 1ull<<(_m)), _Ai, _bi, res);
 	timer->endSubTask("ComputePhase", iteration);
 	t2 = high_resolution_clock::now();
 

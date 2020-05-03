@@ -1,8 +1,8 @@
 #! /bin/bash
 n=3
 #inp=(input0.txt input1.txt input2.txt input3.txt)
-#inp=(input0.txt input1.txt input2.txt)
-inp=(input.txt input.txt input.txt)
+inp=(input0.txt input1.txt input2.txt)
+#inp=(input.txt input.txt input.txt)
 typ=ZpMersenne127
 cir=circuit.txt
 pty=Parties.txt
