@@ -29,7 +29,7 @@ class CompareGate
 		//can it work?
 		int _k = 60;
 		int _m = 32;
-		int _kappa = 8;
+		int _kappa = 4;
 		int iteration;
 		int m_partyID;
 		TemplateField<FieldType> *field; // used to call some field functions
@@ -1388,7 +1388,8 @@ void CompareGate<FieldType>::TruncPR(vector<FieldType> &a,vector<FieldType> &res
 	int m = _m; // # of decimal digits
 	int k = _k; // # of range
 	int kappa = _kappa;
-	FieldType khalf(1ll<<(k-1));
+	FieldType khalf(1ll<<k);
+	khalf= khalf * khalf;
 	FieldType twom(1ll<<_m);
 	vector<FieldType> r,r1,r2,r2open;
 	vector<vector<FieldType> > rBits;
@@ -1404,7 +1405,7 @@ void CompareGate<FieldType>::TruncPR(vector<FieldType> &a,vector<FieldType> &res
 	if(flag_print)
 		cout<<"TruncPR: get bit share done"<<endl;
 	//step 2: add everything up and open them
-	//notice the overall process will [not] exceed 2^31
+	//notice the overall process will [not] exceed 2^120
 	for(int i=0; i<tot; i++)
 	{
 		//first use the lower m digits to restore r1
@@ -1413,10 +1414,10 @@ void CompareGate<FieldType>::TruncPR(vector<FieldType> &a,vector<FieldType> &res
 			r1[i] = r1[i] * field->GetElement(2) + rBits[i][j];
 		//now restore r2
 		r2.push_back(field->GetElement(0));
-		for(int j = eleSize - k - kappa; j < eleSize; j++)
+		for(int j = eleSize - 2 * k - kappa; j < eleSize; j++)
 			r2[i] = r2[i] * field->GetElement(2) + rBits[i][j];
 		r2[i] = r2[i] + a[i] + khalf;
-		//notice: r2 should be smaller than about 2^24, overwhelmed by a[i]
+		//notice: r2 should be smaller than about 2^120, overwhelmed by a[i]
 	}
 	helper->openShare(tot,r2,r2open);
 	if(flag_print)
@@ -1659,7 +1660,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 		*/
 
 	//the following are double number testing
-	if(flag_print)
+	/*if(flag_print)
 	  {
 	  vector<FieldType> a1,a2,a3;
 	  TruncPR(shareOfB[0],a2);
@@ -1686,7 +1687,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	cout<<"passed, checking softThres"<<endl;
 	for(int i=0; i<dim; i++)
 	cout<<Ai[0][i]<<"->"<<_ans[i]<<endl;
-	}
+	}*/
 	//start iteration.
 	for(int _t=0; _t<iter; _t++)
 	{
@@ -1711,6 +1712,18 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 			doubleVecMult(tmp1,tmp2,tmp);
 			for(int j=0; j<dim; j++)
 				tmp[j] = tmp[j] + shareOfB[i][j];
+			if(flag_print)
+			{
+				cout<<"tmp in 4(a):"<<endl;
+				vector<FieldType> _tmp;
+				helper->openShare(dim,tmp,_tmp);
+				for(int j=0; j<dim; j++)
+					cout<<_tmp[j]<<endl;
+				cout<<"Ai[0] in 4(a):"<<endl;
+				helper->openShare(dim,shareOfA[i][0],_tmp);
+				for(int j=0; j<dim; j++)
+					cout<<_tmp[j]<<endl;
+			}
 			//for(int j=0; j<dim; j++) //TODO: can we mult directly?
 			//	tmp.push_back(shareOfB[i][j] + rho * (shareOfZ[j] - shareOfU[i][j]));
 			//do matrix multiplication
@@ -1719,7 +1732,17 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 				//TODO: this is computed one by one. Can we batch?
 				vector<FieldType> _t0;
 				doubleVecMult(shareOfA[i][j],tmp,_t0);
-				shareOfW[i][j] = 0;
+				if(flag_print)
+				{
+					vector<FieldType> _tt,_tt1,_tt2;
+					helper->DNMultVec(shareOfA[i][j],tmp,_tt,1);
+					helper->openShare(dim,_tt,_tt1);
+					cout<<"4(a), W after mult"<<endl;
+					helper->openShare(dim,_t0,_tt2);
+					for(int o=0; o<dim; o++)
+						cout<<_tt1[o]<<"->"<<_tt2[o]<<endl;
+				}
+				shareOfW[i][j] = field->GetElement(0);
 				for(int l=0; l<dim; l++)
 					shareOfW[i][j] = shareOfW[i][j] + _t0[l];
 			}
