@@ -463,11 +463,11 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
 }
 
 template <class FieldType> void ProtocolParty<FieldType>::run() {
-  int segStart = 0;
-  int segEnd = 0;
-  const auto& gates = _circuit.getGates();
   
   for (int i = 0; i < _iterations; i++) {
+    int segStart = 0;
+    int segEnd = 0;
+    const auto& gates = _circuit.getGates();
     for (int curSeg = 0; curSeg < _nSegs; curSeg++){
       // if (curSeg == 2) {        // TODO: delete this, test only
       //   _disp.addDispPairs(0, 1);
