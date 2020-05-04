@@ -1664,6 +1664,8 @@ FieldType ProtocolParty<FieldType>::challenge() {
   vector<FieldType> lambdaShare(1, _coinShares[_coinOffset++]);
   vector<FieldType> lambda(1);
   openTShares(1, true, lambdaShare, lambda);
+  vector<vector<byte>> sendEmpty(_N), recEmpty(_N);
+  _comm.allToAll(sendEmpty, recEmpty);
   return lambda[0];
 }
 
