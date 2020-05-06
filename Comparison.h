@@ -10,6 +10,9 @@
 
 //append B to A
 #define _append(A,B) A.insert(A.end(),B.begin(),B.end())
+
+//#define in_range(x) true
+//#define in_range(x) (((x) < field->GetElement(1ll<<63)) || ((-x) < field->GetElement(1ll<<63)))
 template<class FieldType>
 class CompareGate 
 {
@@ -27,9 +30,9 @@ class CompareGate
 		//for safety, we use 40 bit floats
 		//fixed-point floats, 32 decimals
 		//can it work?
-		int _k = 60;
-		int _m = 32;
-		int _kappa = 4;
+		int _k = 62;
+		int _m = 40;
+		int _kappa = 0;
 		int iteration;
 		int m_partyID;
 		TemplateField<FieldType> *field; // used to call some field functions
@@ -48,6 +51,7 @@ class CompareGate
 		void runOnline();
 		void runOffline();
 		void verificationPhase();
+		void outputPhase(vector<FieldType> &res,string f);
 		// Compgate functions
 		void getRandomBitShare(int num,vector<FieldType> &res, vector<vector<FieldType> > &bits);
 		//void genRandom01(int num,vector<vector<FieldType>> &bin,vector<FieldType> &val);
@@ -84,10 +88,29 @@ class CompareGate
 		void readLassoInputs();
 		//void readLassoInput(vector<vector<FieldType> > & Ai, vector<FieldType> &bi);
 		void runLasso(int iter,FieldType lambda, FieldType rho, vector<vector<FieldType> > & Ai, vector<FieldType> &bi, vector<FieldType> &res);
+		//this is for debug
+		bool in_range(FieldType tmp);
 };
 
 /////////////////////////////////////////////
 //START OF COMPAREGATE
+template<class FieldType>
+bool CompareGate<FieldType>::in_range(FieldType tmp)
+{
+	cout<<"Shouldn't be here!"<<endl;
+	abort();
+	return true;
+}
+
+template<>
+inline bool CompareGate<ZpMersenne127Element>::in_range(ZpMersenne127Element tmp)
+{
+	if(tmp.elem < (1ull<<63)) return true;
+	tmp = tmp + (1ull<<63);
+	if(tmp.elem < (1ull<<63)) return true;
+	return false;
+}
+
 template<class FieldType>
 FieldType CompareGate<FieldType>::getDiv(FieldType a,long r)
 {
@@ -98,8 +121,14 @@ FieldType CompareGate<FieldType>::getDiv(FieldType a,long r)
 template<>
 inline ZpMersenne127Element CompareGate<ZpMersenne127Element>::getDiv(ZpMersenne127Element a, long r)
 {
-	__uint128_t elem = a.elem;
-	return ZpMersenne127Element(elem / (__uint128_t)r);
+	/*if(a.elem > (1ull<<63))
+	{
+		cout<<"Invalid getDiv!"<<endl;
+		abort();
+	}*/
+	__int128_t elem = a.elem;
+	elem = elem / r;
+	return ZpMersenne127Element(elem);
 }
 
 template<class FieldType>
@@ -112,7 +141,12 @@ long CompareGate<FieldType>::getMod(FieldType a,long r)
 template<>
 inline long CompareGate<ZpMersenne127Element>::getMod(ZpMersenne127Element a,long r)
 {
-	__uint128_t tmp = a.elem;
+	/*if(a.elem > (1ull<<63))
+	{
+		cout<<"Invalid getMod!"<<endl;
+		abort();
+	}*/
+	__int128_t tmp = a.elem;
 	return (long)(tmp % r);
 }
 
@@ -844,10 +878,10 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 		res[suc]=0;
 		//generate from MSB to LSB
 		//first 3 bits: 0
-		if(_bitSharesValue.size() <= _bitShareOffset + eleSize)
+		if(_bitSharesValue.size() < _bitShareOffset + eleSize)
 		{
 			cout<<"Not enough bit share!"<<endl;
-			generateBitShares(num+5-suc);
+			generateBitShares(num-suc);
 		}
 		for(int j=0; j<blank_size; j++)
 		{
@@ -865,13 +899,13 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 			bits[suc][j] = _bitSharesValue[_bitShareOffset++];
 			res[suc] = res[suc] * FieldType(2) + bits[suc][j];
 		}
-		if(_bitSharesValue.size() <= _bitShareOffset) //not enough?
+		if(_bitSharesValue.size() < _bitShareOffset) //not enough?
 		{
 			cout<<"This can't happen!"<<endl;
 			abort();
 			if(flag_print)
 				cout<<"Not enough bit share! Regenerating....."<<endl;
-			generateBitShares(num+5-suc);
+			generateBitShares(num-suc);
 		}
 	}
 	/*if(flag_print)
@@ -942,11 +976,9 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 	else if(flag_print)
 	cout<<"First try passed!"<<endl;
 	 */
-	if(flag_print)
+	//if(flag_print)
 	{
-		vector<FieldType> tmp;
-		helper->openShare(eleSize,bits[0],tmp);
-		cout<<"Check passed"<<endl;
+		cout<<"Used #bit:"<<_bitShareOffset<<"/"<<_bitSharesValue.size()<<endl;
 	}
 	//res.resize(num);
 	//bits.resize(num);
@@ -1382,15 +1414,14 @@ void CompareGate<FieldType>::TruncPR(vector<FieldType> &a,vector<FieldType> &res
 	  inline void CompareGate<ZZ_p>::TruncPR(vector<ZZ_p> &a,vector<ZZ_p> &res)
 	 */
 {
-
 	int tot = a.size();
 	//step 1: generate r and r'
 	int m = _m; // # of decimal digits
 	int k = _k; // # of range
 	int kappa = _kappa;
-	FieldType khalf(1ll<<k);
+	FieldType khalf(1ull<<(k-1));
 	khalf= khalf * khalf;
-	FieldType twom(1ll<<_m);
+	FieldType twom(1ull<<_m);
 	vector<FieldType> r,r1,r2,r2open;
 	vector<vector<FieldType> > rBits;
 	//vector<ZZ_p> r,r1,r2,r2open;
@@ -1414,7 +1445,7 @@ void CompareGate<FieldType>::TruncPR(vector<FieldType> &a,vector<FieldType> &res
 			r1[i] = r1[i] * field->GetElement(2) + rBits[i][j];
 		//now restore r2
 		r2.push_back(field->GetElement(0));
-		for(int j = eleSize - 2 * k - kappa; j < eleSize; j++)
+		for(int j = eleSize - 2 * (k-1) - kappa; j < eleSize; j++)
 			r2[i] = r2[i] * field->GetElement(2) + rBits[i][j];
 		r2[i] = r2[i] + a[i] + khalf;
 		//notice: r2 should be smaller than about 2^120, overwhelmed by a[i]
@@ -1426,7 +1457,7 @@ void CompareGate<FieldType>::TruncPR(vector<FieldType> &a,vector<FieldType> &res
 		res.resize(tot);
 	for(int i=0; i<tot; i++)
 	{
-		r2open[i] = field->GetElement(getMod(r2open[i],1ll<<m));
+		r2open[i] = field->GetElement(getMod(r2open[i],1ull<<m));
 		res[i] = (a[i] - r2open[i] + r1[i]) / twom;
 	}
 	/*
@@ -1462,7 +1493,8 @@ void CompareGate<FieldType>::SoftThres(vector<FieldType> &thres, vector<FieldTyp
 	//thres is [open value]
 	int tot = a.size();
 	vector<FieldType> b,thresPos,thresNeg;	
-	FieldType pad(1ll<<(_k-1));
+	FieldType pad(1ull<<(_k-1));
+	pad = pad * pad; //field->GetElement(1ll<<20);
 	//thres = thres + (1ll << (_k-1)); //automaically moded by q
 	for(int i=0; i<tot; i++)
 	{
@@ -1706,10 +1738,11 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 			vector<FieldType> tmp,tmp1,tmp2;
 			for(int j=0; j<dim; j++)
 			{
-				tmp1.push_back(shareOfZ[j] - shareOfU[i][j]);
-				tmp2.push_back(rho);
+				tmp1.push_back(rho * (shareOfZ[j] - shareOfU[i][j]));
+				//tmp2.push_back(rho);
 			}
-			doubleVecMult(tmp1,tmp2,tmp);
+			TruncPR(tmp1,tmp);
+			//doubleVecMult(tmp1,tmp2,tmp);
 			for(int j=0; j<dim; j++)
 				tmp[j] = tmp[j] + shareOfB[i][j];
 			if(flag_print)
@@ -1718,11 +1751,25 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 				vector<FieldType> _tmp;
 				helper->openShare(dim,tmp,_tmp);
 				for(int j=0; j<dim; j++)
+				{
 					cout<<_tmp[j]<<endl;
+					/*if(!in_range(_tmp[j]))
+					{
+						cout<<"tmp out of range!"<<endl;
+						abort();
+					}*/
+				}
 				cout<<"Ai[0] in 4(a):"<<endl;
 				helper->openShare(dim,shareOfA[i][0],_tmp);
 				for(int j=0; j<dim; j++)
+				{
 					cout<<_tmp[j]<<endl;
+					if(!in_range(_tmp[j]))
+					{
+						cout<<"Ai out of range!"<<endl;
+						abort();
+					}
+				}
 			}
 			//for(int j=0; j<dim; j++) //TODO: can we mult directly?
 			//	tmp.push_back(shareOfB[i][j] + rho * (shareOfZ[j] - shareOfU[i][j]));
@@ -1754,7 +1801,15 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 			vector<FieldType> _r0;
 			helper->openShare(dim,shareOfW[0],_r0);
 			for(int i=0; i<dim; i++)
+			{
 				cout<<_r0[i]<<","<<endl;
+				if(!in_range(_r0[i]))
+				{
+					cout<<"invalid shareOfW!"<<endl;
+					abort();
+				}
+			}
+			outputPhase(_r0,to_string(_t*2));
 			cout<<"4(b)"<<endl;
 		}
 		//step 4(b)
@@ -1794,7 +1849,14 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 			helper->openShare(dim,shareOfZ,_r2);
 			cout<<"result after softThres:"<<endl;
 			for(int i=0; i<dim; i++)
+			{
 				cout<<_r0[i]<<","<<_r1[i]<<"->"<<_r2[i]<<endl;
+				if(!in_range(_r2[i]))
+				{
+					cout<<"Invalid shareOfZ!"<<endl;
+					abort();
+				}
+			}
 		}
 		//step 4(c)
 		for(int i=0; i<N; i++)
@@ -1802,6 +1864,9 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 			for(int j=0; j<dim; j++)
 				shareOfU[i][j] = shareOfU[i][j] + shareOfW[i][j] - shareOfZ[j];
 		}
+		vector<FieldType> t2;
+		helper->openShare(dim,shareOfZ,t2);
+		outputPhase(t2,to_string(_t*2+1));
 	}//end of iter
 	if(res.size()<dim)
 		res.resize(dim);
@@ -1831,20 +1896,33 @@ template <class FieldType> void CompareGate<FieldType>::readLassoInputs()
 	for(int i=0; i<n; i++)
 		for(int j=0; j<n; j++)
 		{
-			long tmp;
+			string tmp;
 			myfile>>tmp;
+			FieldType cur(0);
+			int l=0;
+			if(tmp[0]=='-') l++;
+			for( ; l<tmp.length(); l++)
+				cur = cur * field->GetElement(10) + field->GetElement((long)(tmp[l] - 48));
+			if(tmp[0]=='-') cur = field->GetElement(0) - cur;
 			if(flag_print)
-				cout<<"Read "<<tmp<<","<<field->GetElement(tmp)<<endl;
-			_Ai[i].push_back(field->GetElement(tmp));
+				cout<<"Read "<<tmp<<"->"<<cur<<endl;
+			_Ai[i].push_back(cur);
 		}
 	//read Bi
 	for(int i=0; i<n; i++)
 	{
-		long tmp;
+		string tmp;
 		myfile>>tmp;
+
+		FieldType cur(0);
+		int l=0;
+		if(tmp[0]=='-') l++;
+		for( ; l<tmp.length(); l++)
+			cur = cur * field->GetElement(10) + field->GetElement((long)(tmp[l] - 48));
+		if(tmp[0]=='-') cur = field->GetElement(0) - cur;
 		if(flag_print)
-			cout<<"Read "<<tmp<<endl;
-		_bi.push_back(field->GetElement(tmp));
+			cout<<"Read "<<tmp<<"->"<<cur<<endl;
+		_bi.push_back(cur);
 	}
 	myfile.close();
 	if(flag_print)
@@ -1882,8 +1960,8 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	timer->startSubTask("preparationPhase", iteration);
 	readLassoInputs();
 	int dim = _Ai.size();
-	int cnt = dim * dim * 100 * n_iter * eleSize;
-	//cnt *= 20;
+	int cnt = 36 * dim * dim  * n_iter * eleSize / 10;
+	//cnt *= 3;
 	if(flag_print)
 		cout<<"Entering helper->preparation"<<endl;
 	if (helper->preparationPhase(cnt, cnt) == false) {
@@ -1896,7 +1974,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 			cout << "finish Preparation Phase" << '\n';
 		}
 	}
-	int cnt_bit = n_iter * 6 * dim;
+	int cnt_bit = 3 * n_iter * dim * dim / 2;
 	generateBitShares(cnt_bit);
 	timer->endSubTask("preparationPhase", iteration);
 	auto t2 = high_resolution_clock::now();
@@ -1940,7 +2018,7 @@ template <class FieldType> void CompareGate<FieldType>::runOnline() {
 
 	t1 = high_resolution_clock::now();
 	timer->startSubTask("outputPhase", iteration);
-	//outputPhase();
+	outputPhase(res,"");
 	timer->endSubTask("outputPhase", iteration);
 	t2 = high_resolution_clock::now();
 
@@ -1963,5 +2041,17 @@ void CompareGate<FieldType>::verificationPhase()
 		r = r * l;
 	}
 	helper->compressVerifyVec(chkA,chkB,c);
+}
+
+//only party 0 outputs
+	template<class FieldType>
+void CompareGate<FieldType>::outputPhase(vector<FieldType> &res,string f)
+{
+	if(m_partyID!=0) return;
+	ofstream ouf;
+	ouf.open("output" + f + ".txt");
+	for(int i=0; i<res.size(); i++)
+		ouf<<res[i]; //no need for endl
+	ouf.close();
 }
 #endif /* COMPARISON_H_ */
