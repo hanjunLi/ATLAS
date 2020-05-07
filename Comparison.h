@@ -31,7 +31,7 @@ class CompareGate
 		//fixed-point floats, 32 decimals
 		//can it work?
 		int _k = 62;
-		int _m = 40;
+		int _m = 48;
 		int _kappa = 0;
 		int iteration;
 		int m_partyID;
@@ -212,7 +212,7 @@ CompareGate<FieldType>::CompareGate(ProtocolParty<FieldType> *ptr,int siz,int bs
 	//N = n;
 	//T = (N-1)/2;
 	times = 1;
-	n_iter = 10;
+	n_iter = 30;
 	inputsFile = inp;	
 	vector<string> subTaskNames{
 		"Offline",      "preparationPhase",  "Online",     "inputPhase",
@@ -1961,7 +1961,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	readLassoInputs();
 	int dim = _Ai.size();
 	int cnt = 36 * dim * dim  * n_iter * eleSize / 10;
-	//cnt *= 3;
+	//cnt *= 2;
 	if(flag_print)
 		cout<<"Entering helper->preparation"<<endl;
 	if (helper->preparationPhase(cnt, cnt) == false) {
@@ -1998,7 +1998,7 @@ template <class FieldType> void CompareGate<FieldType>::runOnline() {
 	vector<FieldType> res;
 	timer->startSubTask("ComputePhase", iteration);
 	//rho = 10, lambda = 0.1
-	runLasso(n_iter, field->GetElement((1ull<<(_m))/10), field->GetElement(10 * 1ull<<(_m)), _Ai, _bi, res);
+	runLasso(n_iter, field->GetElement((1ull<<(_m))/10), field->GetElement(10 * (1ull<<(_m))), _Ai, _bi, res);
 	timer->endSubTask("ComputePhase", iteration);
 	t2 = high_resolution_clock::now();
 

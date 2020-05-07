@@ -3,18 +3,28 @@ import numpy as np
 from sklearn import linear_model
 from scipy import linalg
 
-n_train = 463715
-n_test = 51630
+#n_train = 4178504
+#n_test = 4200000
 # -- global trainning data and parameters
 # data = np.genfromtxt("small_data.txt",delimiter=',')
-data = np.genfromtxt("YearPredictionMSD.txt", delimiter=',')
-data_train = data[:n_train]
+data = np.genfromtxt("ethylene_CO.txt")
+_cnt = 0
+data_train = []
+data_test = []
+for _ in range(data.shape[0]):
+    if (_ % 100) ==0 :
+        data_test.append(data[_])
+    else:
+        data_train.append(data[_])
+data_train = np.array(data_train)
+data_test = np.array(data_test)
+#data_train = data[:n_train]
 # data_train = data[:463715]
-data_test = data[n_train:n_train + n_test]
+#data_test = data[i * 100 for i in range(40000)]
 # data_test = data[463715:]
 nParties = 3
-nFeatures = 90  # TODO: should be 90
-nIter = 10                      # TODO: experiment and change this
+nFeatures = 16  # TODO: should be 16
+nIter = 30                      # TODO: experiment and change this
 param_rho = 10                  # TODO: experiment and change this
 param_lamb = 0.1                # TODO: experiment and change this
 max_num = 0
@@ -27,8 +37,8 @@ def divide_data(data_in, nParties, nFeatures):
     dataSize = data_in.shape[0]
     perPartySize = dataSize // nParties 
     cutOff = perPartySize * nParties
-    X = data_in[:cutOff, 1:nFeatures+1]
-    Y = data_in[:cutOff, 0]
+    X = data_in[:cutOff, 3:3 + nFeatures]
+    Y = data_in[:cutOff, 2]
     Xs = X.reshape(nParties, perPartySize, nFeatures)
     Ys = Y.reshape(nParties, perPartySize)
     return Xs, Ys
@@ -61,12 +71,12 @@ def compute_error(prediction, truth):
 
 
 def preprocess_data(data_train, data_test):
-    X_average = np.average(data_train[:, 1:])
-    Y_average = np.average(data_train[:, 0])
-    data_train[:, 1:] -= X_average
-    data_train[:, 0] -= Y_average
-    data_test[:, 1:] -= X_average
-    data_test[:, 0] -= Y_average
+    X_average = np.average(data_train[:, 3:])
+    Y_average = np.average(data_train[:, 2])
+    data_train[:, 3:] -= X_average
+    data_train[:, 2] -= Y_average
+    data_test[:, 3:] -= X_average
+    data_test[:, 2] -= Y_average
     return data_train, data_test
 
 
@@ -74,8 +84,9 @@ sft = 2**48
 #sft = 1
 # -- initialization: step 1, 2, 3
 data_train, data_test = preprocess_data(data_train, data_test)
+print("preprocess done")
 # now only test first 10 feature ?
-tmp_train = data_train[:, :1+nFeatures]
+tmp_train = data_train[:, :3+nFeatures]
 
 Xs, Ys = divide_data(tmp_train, nParties, nFeatures)
 #Xs, Ys = divide_data(data_train, nParties, 90)
@@ -83,6 +94,7 @@ As = [np.empty((nFeatures, nFeatures))]*nParties
 bs = [np.empty(nFeatures)]*nParties
 for i in range(nParties):
     As[i], bs[i] = compress_data(Xs[i], Ys[i], param_rho)
+    
     fo = open("input"+str(i)+".txt", "w")
     #print(As[i].shape[0],bs[i].shape[0])
     fo.write(str(As[i].shape[0])+'\n')
@@ -97,6 +109,7 @@ for i in range(nParties):
         fo.write(str(int(bs[i][j]*sft))+' ')
     fo.write('\n')
     fo.close()
+   
 us = [np.zeros(nFeatures)] * nParties
 ws = [np.zeros(nFeatures)] * nParties
 z = np.zeros(nFeatures)
@@ -124,8 +137,8 @@ print("Max number:",max_num)
 for _ in range(z.shape[0]):
     print(z[_])
 # -- test accuracy
-prediction = (data_test[:, 1:1+nFeatures] @ z).round()
-truth = (data_test[:, 0]).round()
+prediction = (data_test[:, 3:3+nFeatures] @ z).round()
+truth = (data_test[:, 2]).round()
 l2Error = compute_error(prediction, truth)
 print("Helen prediction error: ", l2Error)
 
@@ -142,16 +155,16 @@ for _ in range(nFeatures):
     _z.append(curv)
     print(curv)
 #calculated accuracy
-prediction = (data_test[:, 1:1+nFeatures] @ _z).round()
-truth = (data_test[:, 0]).round()
+prediction = (data_test[:, 3:3+nFeatures] @ _z).round()
+truth = (data_test[:, 2]).round()
 l2Error = compute_error(prediction, truth)
 print("My Helen prediction error: ", l2Error)
 
 # -- baseline accuracy
 clf = linear_model.Lasso(alpha=param_lamb)
 # clf = linear_model.LinearRegression()
-clf.fit(data_train[:, 1:1+nFeatures], data_train[:, 0])
-sk_prediction = clf.predict(data_test[:, 1:1+nFeatures]).round()
+clf.fit(data_train[:, 3:3+nFeatures], data_train[:, 2])
+sk_prediction = clf.predict(data_test[:, 3:3+nFeatures]).round()
 skl2Error = compute_error(sk_prediction, truth)
 print("sklearn prediction error: ", skl2Error)
 

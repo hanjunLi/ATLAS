@@ -1,5 +1,5 @@
-dim = 20
-sft = 36
+dim = 16
+sft = 48
 for i in range(10):
 	print("output #",i)
 	print("value of w[0]:")
