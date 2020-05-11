@@ -296,6 +296,8 @@ int CompareGate<FieldType>::generateBitShares(int num)
 	_append(chkC,resShares);
 	if(flag_print)
 		cout<<"DNMult finished"<<endl;
+
+        verificationPhase();    // fix: verify before open mult results
 	helper->openShare(tot,resShares,secrets);
 	if(flag_print)
 	{
@@ -1864,20 +1866,22 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 			for(int j=0; j<dim; j++)
 				shareOfU[i][j] = shareOfU[i][j] + shareOfW[i][j] - shareOfZ[j];
 		}
-		vector<FieldType> t2;
-		helper->openShare(dim,shareOfZ,t2);
-		outputPhase(t2,to_string(_t*2+1));
+                // shouldn't open w/o verify
+		// vector<FieldType> t2;
+		// helper->openShare(dim,shareOfZ,t2);
+		// outputPhase(t2,to_string(_t*2+1));
 	}//end of iter
 	if(res.size()<dim)
 		res.resize(dim);
-	cout<<"Getting result:"<<endl;
-	helper->openShare(dim,shareOfZ,res);
-	for(int i=0; i<dim; i++)
-	{
-		cout<<res[i]<<",";
-		//cout<<res[i] / field->GetElement(1ll<<_m) <<endl;
-	}
-	cout<<endl;
+        // shouldn't open w/o verify
+	// cout<<"Getting result:"<<endl;
+	// helper->openShare(dim,shareOfZ,res);
+	// for(int i=0; i<dim; i++)
+	// {
+	// 	cout<<res[i]<<",";
+	// 	//cout<<res[i] / field->GetElement(1ll<<_m) <<endl;
+	// }
+	// cout<<endl;
 	//if(flag_print)
 	//	cout<<"Used zero:"<<_zeroShareOffset<<"/"<<zero_cnt<<endl;
 }
@@ -1961,9 +1965,10 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	readLassoInputs();
 	int dim = _Ai.size();
 	int cnt = 36 * dim * dim  * n_iter * eleSize / 10;
-	//cnt *= 2;
 	if(flag_print)
 		cout<<"Entering helper->preparation"<<endl;
+        // TODO: tighten cnt
+        cnt *= 2;
 	if (helper->preparationPhase(cnt, cnt) == false) {
 		if (flag_print) {
 			cout << "preparationPhase failed" << '\n';
@@ -2041,6 +2046,10 @@ void CompareGate<FieldType>::verificationPhase()
 		r = r * l;
 	}
 	helper->compressVerifyVec(chkA,chkB,c);
+        // verify all mults up to now.
+        chkA.clear();
+        chkB.clear();
+        chkC.clear();
 }
 
 //only party 0 outputs
