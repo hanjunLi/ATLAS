@@ -1968,7 +1968,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	if(flag_print)
 		cout<<"Entering helper->preparation"<<endl;
         // TODO: tighten cnt
-        cnt *= 2;
+        // cnt *= 2;
 	if (helper->preparationPhase(cnt, cnt) == false) {
 		if (flag_print) {
 			cout << "preparationPhase failed" << '\n';
