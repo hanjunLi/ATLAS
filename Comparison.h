@@ -65,7 +65,8 @@ class CompareGate
 		// compare the function (a < p/2)
 		void compHalfP(vector<FieldType> &a, vector<FieldType> &dest);
 		// compute square inverse of a given element
-		FieldType compSqrInverse(FieldType &a);
+		void compSqrInverse(vector<FieldType> &a, vector<FieldType> &res);
+		//FieldType compSqrInverse(FieldType &a);
 		//save the prefix or of array a to array res
 		void compPrefixOr(vector<vector<FieldType> > &a, vector<vector<FieldType> > &res);
 		void compFanInOr(int num, vector<vector<FieldType> > &a, vector<FieldType> &res);
@@ -236,13 +237,17 @@ CompareGate<FieldType>::~CompareGate()
 }
 
 	template <class FieldType>
-FieldType CompareGate<FieldType>::compSqrInverse(FieldType &num)
+void CompareGate<FieldType>::compSqrInverse(vector<FieldType> &num,vector<FieldType> &res)
 {
-	return num.sqrt();
+	if(res.size()<num.size()) res.resize(num.size());
+	for(int i=0; i<num.size(); i++)
+		res[i] = num[i].sqrt();
 }
 
+//since we don't use ZZ_p,
+//this is badly implemented, with very low efficiency.
 	template<>
-inline ZZ_p CompareGate<ZZ_p>::compSqrInverse(ZZ_p &num)
+inline void CompareGate<ZZ_p>::compSqrInverse(vector<ZZ_p> &num,vector<ZZ_p> &res)
 {
 	//the mod is 2147483647
 	//we don't need to init ZZ (?)
@@ -253,20 +258,31 @@ inline ZZ_p CompareGate<ZZ_p>::compSqrInverse(ZZ_p &num)
 	ZZ tmp = (md+1)/4;
 	//if(flag_print)
 	//	cout<<"Times:"<<tmp<<endl;
-	ZZ_p x = power(num,tmp); //qpow(num,tmp); //power(num,tmp);
+	int tot=num.size();
+	if(res.size()<tot)
+		res.resize(tot);
+	for(int i=0; i<num.size(); i++)
+		res[i] = power(num[i],tmp);
+	
+	//ZZ_p x = power(num,tmp); //qpow(num,tmp); //power(num,tmp);
 	//if(flag_print)
 	//	cout<<"Res:"<<x<<endl<<"Check:"<<x * num<<endl;
-	return x;
+	//return x;
 }
 
 template<>
-inline ZpMersenne127Element CompareGate<ZpMersenne127Element>::compSqrInverse(ZpMersenne127Element &num)
+inline void CompareGate<ZpMersenne127Element>::compSqrInverse(vector<ZpMersenne127Element> &num, vector<ZpMersenne127Element> &res)
 {
+	int tot = num.size();
+	if(res.size()<tot) res.resize(tot);
 	//(md+1)/4: **2 for 125 times
-	ZpMersenne127Element tmp(num);
-	for(int i=0; i<125; i++)
-		tmp = tmp * tmp;
-	return tmp;
+	for(int i=0; i<tot; i++)
+	{
+		ZpMersenne127Element tmp(num[i]);
+		for(int j=0; j<125; j++)
+			tmp = tmp * tmp;
+		res[i]=tmp;
+	}
 }
 //return value: succesfully generated shares
 	template <class FieldType>
@@ -305,12 +321,14 @@ int CompareGate<FieldType>::generateBitShares(int num)
 		cout<<secrets[0]<<","<<secrets[1]<<endl;
 	}
 	//for each opened, check if is 0, if not we generate the share
+	vector<FieldType> invs;
+	compSqrInverse(secrets,invs);
 	for(int i=0; i<tot; i++)
-		if(secrets[i] != field->GetElement(0)) //valid
+		if(invs[i] != field->GetElement(0)) //valid
 		{
 			//if(flag_print)
 			//	cout<<"Trying to calc inv for "<<secrets[i]<<endl;
-			FieldType cur = compSqrInverse(secrets[i]);
+			FieldType cur(invs[i]); // = compSqrInverse(secrets[i]);
 			//if(flag_print)
 			//	cout<<"find invs:"<<cur<<","<<PlainText[i]<<endl;
 			//cout<<"Inv2:"<<FieldType(1) / FieldType(2)<<endl;
