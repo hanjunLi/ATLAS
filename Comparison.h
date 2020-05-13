@@ -235,13 +235,16 @@ CompareGate<FieldType>::CompareGate(ProtocolParty<FieldType> *ptr,int siz,int bs
 CompareGate<FieldType>::~CompareGate()
 {
 }
-
+//warning: this may not be pure random. Please Use Specified version of ZZ_p and ZpMersenne127
 	template <class FieldType>
 void CompareGate<FieldType>::compSqrInverse(vector<FieldType> &num,vector<FieldType> &res)
 {
 	if(res.size()<num.size()) res.resize(num.size());
 	for(int i=0; i<num.size(); i++)
+	{
 		res[i] = num[i].sqrt();
+		//if(res[i] + res[i] < res[i]) res[i] = FieldType(0) - res[i];
+	}
 }
 
 //since we don't use ZZ_p,
@@ -262,7 +265,10 @@ inline void CompareGate<ZZ_p>::compSqrInverse(vector<ZZ_p> &num,vector<ZZ_p> &re
 	if(res.size()<tot)
 		res.resize(tot);
 	for(int i=0; i<num.size(); i++)
+	{
 		res[i] = power(num[i],tmp);
+		if(conv<ZZ>(res[i] + res[i]) < conv<ZZ>(res[i])) res[i] = ZZ_p(0) - res[i];
+	}
 	
 	//ZZ_p x = power(num,tmp); //qpow(num,tmp); //power(num,tmp);
 	//if(flag_print)
@@ -278,9 +284,11 @@ inline void CompareGate<ZpMersenne127Element>::compSqrInverse(vector<ZpMersenne1
 	//(md+1)/4: **2 for 125 times
 	for(int i=0; i<tot; i++)
 	{
-		ZpMersenne127Element tmp(num[i]);
+		ZpMersenne127Element tmp(num[i]),tmp2;
 		for(int j=0; j<125; j++)
 			tmp = tmp * tmp;
+		tmp2 = tmp + tmp;
+		if(tmp2.elem < tmp.elem) tmp = ZpMersenne127Element(0) - tmp;
 		res[i]=tmp;
 	}
 }
@@ -323,16 +331,24 @@ int CompareGate<FieldType>::generateBitShares(int num)
 	//for each opened, check if is 0, if not we generate the share
 	vector<FieldType> invs;
 	compSqrInverse(secrets,invs);
+	if(flag_print)
+		cout<<"Inverse computed"<<endl;
+	FieldType inv2 = FieldType(1) / FieldType(2);
 	for(int i=0; i<tot; i++)
 		if(invs[i] != field->GetElement(0)) //valid
 		{
+			if(flag_print)
+			{
+				if(i%1000000==0)
+					cout<<"Generating bit "<<i<<endl;
+			}
 			//if(flag_print)
 			//	cout<<"Trying to calc inv for "<<secrets[i]<<endl;
 			FieldType cur(invs[i]); // = compSqrInverse(secrets[i]);
 			//if(flag_print)
 			//	cout<<"find invs:"<<cur<<","<<PlainText[i]<<endl;
 			//cout<<"Inv2:"<<FieldType(1) / FieldType(2)<<endl;
-			cur = ( (FieldType(1) / FieldType(cur)) * tempShares[i]+ FieldType(1))/ FieldType(2);
+			cur = tempShares[i] / cur + inv2; //FieldType(1))/ FieldType(2);
 			//if(flag_print)
 			//	cout<<"found share:"<<cur<<endl;
 			/*if(flag_print)
@@ -1977,12 +1993,12 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	timer->startSubTask("preparationPhase", iteration);
 	readLassoInputs();
 	int dim = _Ai.size();
-	int cnt = 36 * dim * dim  * n_iter * eleSize / 10;
+	int cnt = 5 * dim * dim  * n_iter * eleSize;
 	//if(flag_print)
 		cout<<"Entering helper->preparation"<<endl;
         // TODO: tighten cnt
         // cnt *= 3;
-	if (helper->preparationPhase(cnt, cnt) == false) {
+	if (helper->preparationPhase(cnt, 3 * cnt / 2) == false) {
 		if (flag_print) {
 			cout << "preparationPhase failed" << '\n';
 		}
