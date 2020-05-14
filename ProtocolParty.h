@@ -24,7 +24,7 @@
 #include "Communication.h"
 #include <cmath>
 
-#define flag_print true
+#define flag_print false
 #define flag_print_output false
 
 using namespace std;

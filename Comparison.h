@@ -1809,11 +1809,33 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 			//for(int j=0; j<dim; j++) //TODO: can we mult directly?
 			//	tmp.push_back(shareOfB[i][j] + rho * (shareOfZ[j] - shareOfU[i][j]));
 			//do matrix multiplication
-			for(int j=0; j<dim; j++) //fill W[i][j]
+			tmp1.resize(dim*dim);
+			tmp2.resize(dim*dim);
+			for(int j=0,_c=0; j<dim; j++)
+				for(int l=0; l<dim; l++,_c++)
+				{
+					tmp1[_c] = tmp[l];
+					tmp2[_c] = shareOfA[i][j][l];
+				}
+			vector<FieldType> tmp3;
+			doubleVecMult(tmp1,tmp2,tmp3);
+			for(int j=0,_c=0; j<dim; j++) //fill W[i][j]
 			{
 				//TODO: this is computed one by one. Can we batch?
-				vector<FieldType> _t0;
+				/*vector<FieldType> _t0;
 				doubleVecMult(shareOfA[i][j],tmp,_t0);
+				{
+					
+					vector<FieldType> _a1,_a2;
+					helper->openShare(dim*dim,tmp3,_a1);
+					helper->openShare(dim,_t0,_a2);
+				for(int l=0; l<dim; l++)
+					cout<<"value at "<<l<<":"<<_a1[_c+l]<<","<<_a2[l]<<endl;
+					if(_a1[l] != _a2[_c+l])
+					{
+					//	cout<<"Error 4(b) at index "<<l<<","<<_t0[l]<<","<<tmp3[_c+l]<<endl;
+					}
+				}*/
 				/*if(flag_print)
 				{
 					vector<FieldType> _tt,_tt1,_tt2;
@@ -1825,8 +1847,9 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 						cout<<_tt1[o]<<"->"<<_tt2[o]<<endl;
 				}*/
 				shareOfW[i][j] = field->GetElement(0);
-				for(int l=0; l<dim; l++)
-					shareOfW[i][j] = shareOfW[i][j] + _t0[l];
+				for(int l=0; l<dim; l++,_c++)
+					shareOfW[i][j] = shareOfW[i][j] + tmp3[_c];
+				//_c+=dim;
 			}
 		}
 		/*if(flag_print)
