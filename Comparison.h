@@ -1993,7 +1993,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	timer->startSubTask("preparationPhase", iteration);
 	readLassoInputs();
 	int dim = _Ai.size();
-	int cnt = 11 * dim * dim  * n_iter * eleSize;
+	int cnt = 6 * dim * dim  * n_iter * eleSize;
 	//if(flag_print)
 		cout<<"Entering helper->preparation"<<endl;
         // TODO: tighten cnt
@@ -2009,7 +2009,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 		}
 	}
 	cout<<"generating bit"<<endl;
-	int cnt_bit = 3 * n_iter * dim * dim;
+	int cnt_bit = 27 * n_iter * dim * dim / 10;
 	generateBitShares(cnt_bit);
 	cout<<"bit generation done"<<endl;
 	timer->endSubTask("preparationPhase", iteration);
