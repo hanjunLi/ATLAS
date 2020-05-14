@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <x86intrin.h>
 
-
+#include<ctime>
 
 /**
  * The main structure of our protocol is as follows:
@@ -94,10 +94,13 @@ int main(int argc, char *argv[]) {
     CompareGate<ZpMersenne127Element> comp_protocol(&mpc_protocol, 128, 1,
                                     mpc_protocol.getMyId(), mpc_protocol.getField(), N, inp);
 	auto t1 = high_resolution_clock::now();
+	auto _t1 = clock();
 	comp_protocol.run();
 	auto t2 = high_resolution_clock::now();
+	auto _t2 = clock();
 	auto duration = duration_cast<milliseconds>(t2-t1).count();
 	cout<<"time:"<<duration<<endl;
+	cout<<"real time:"<<_t2 - _t1<<endl;
 	
    }
 

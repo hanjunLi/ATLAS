@@ -213,7 +213,7 @@ CompareGate<FieldType>::CompareGate(ProtocolParty<FieldType> *ptr,int siz,int bs
 	//N = n;
 	//T = (N-1)/2;
 	times = 1;
-	n_iter = 30;
+	n_iter = 10;
 	inputsFile = inp;	
 	vector<string> subTaskNames{
 		"Offline",      "preparationPhase",  "Online",     "inputPhase",
@@ -1904,11 +1904,11 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 		res.resize(dim);
         // shouldn't open w/o verify
 	// cout<<"Getting result:"<<endl;
-	// helper->openShare(dim,shareOfZ,res);
+	 helper->openShare(dim,shareOfZ,res);
 	// for(int i=0; i<dim; i++)
 	// {
-	// 	cout<<res[i]<<",";
-	// 	//cout<<res[i] / field->GetElement(1ll<<_m) <<endl;
+	 //	cout<<res[i]<<",";
+	 	//cout<<res[i] / field->GetElement(1ll<<_m) <<endl;
 	// }
 	// cout<<endl;
 	//if(flag_print)
@@ -1993,12 +1993,12 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	timer->startSubTask("preparationPhase", iteration);
 	readLassoInputs();
 	int dim = _Ai.size();
-	int cnt = 5 * dim * dim  * n_iter * eleSize;
+	int cnt = 11 * dim * dim  * n_iter * eleSize;
 	//if(flag_print)
 		cout<<"Entering helper->preparation"<<endl;
         // TODO: tighten cnt
         // cnt *= 3;
-	if (helper->preparationPhase(cnt, 3 * cnt / 2) == false) {
+	if (helper->preparationPhase(cnt, cnt) == false) {
 		if (flag_print) {
 			cout << "preparationPhase failed" << '\n';
 		}
@@ -2009,7 +2009,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 		}
 	}
 	cout<<"generating bit"<<endl;
-	int cnt_bit = 3 * n_iter * dim * dim / 2;
+	int cnt_bit = 3 * n_iter * dim * dim;
 	generateBitShares(cnt_bit);
 	cout<<"bit generation done"<<endl;
 	timer->endSubTask("preparationPhase", iteration);
