@@ -348,7 +348,8 @@ int CompareGate<FieldType>::generateBitShares(int num)
 			//if(flag_print)
 			//	cout<<"find invs:"<<cur<<","<<PlainText[i]<<endl;
 			//cout<<"Inv2:"<<FieldType(1) / FieldType(2)<<endl;
-			cur = tempShares[i] / cur + inv2; //FieldType(1))/ FieldType(2);
+			cur = tempShares[i] / cur * inv2 + inv2;
+			//cur = tempShares[i] / cur + inv2; //FieldType(1))/ FieldType(2);
 			//if(flag_print)
 			//	cout<<"found share:"<<cur<<endl;
 			/*if(flag_print)
@@ -2009,7 +2010,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	//if(flag_print)
 		cout<<"Entering helper->preparation"<<endl;
         // TODO: tighten cnt
-        // cnt *= 3;
+        // cnt *= 2;
 	if (helper->preparationPhase(cnt, cnt) == false) {
 		if (flag_print) {
 			cout << "preparationPhase failed" << '\n';
@@ -2025,6 +2026,8 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	_t1=time(NULL);
 	cout<<"generating bit"<<endl;
 	int cnt_bit = 27 * n_iter * dim * dim / 10;
+	//uncomment this when running 16*16
+	cnt_bit = cnt_bit * 3 / 4;
 	generateBitShares(cnt_bit);
 	_t2 = time(NULL);
 	cout<<"Generating Bit time:"<<_t2-_t1<<endl;
