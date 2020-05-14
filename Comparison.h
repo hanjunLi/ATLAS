@@ -7,7 +7,7 @@
 #include "ProtocolParty.h"
 #include "Interpolate.h"
 #include <vector>
-
+#include<ctime>
 //append B to A
 #define _append(A,B) A.insert(A.end(),B.begin(),B.end())
 
@@ -1012,7 +1012,7 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 	else if(flag_print)
 	cout<<"First try passed!"<<endl;
 	 */
-	//if(flag_print)
+	if(flag_print)
 	{
 		cout<<"Used #bit:"<<_bitShareOffset<<"/"<<_bitSharesValue.size()<<endl;
 	}
@@ -1637,7 +1637,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	//step 1: send and receive shares of Ai, bi, w, z and u 
 	if(flag_print)
 		cout<<"Lasso:step 1:"<<endl;
-
+	auto _t01 = time(NULL);
         // send input: flat(Ai) || bi || u (= 0) || w (= 0)
         int sendSize = dim*dim + dim*3;
         vector<vector<FieldType>> sendBufsElements;
@@ -1757,8 +1757,11 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	cout<<Ai[0][i]<<"->"<<_ans[i]<<endl;
 	}*/
 	//start iteration.
+	auto _t02 = time(NULL);
+	cout<<"runLasso:preparation time:"<<_t02-_t01<<endl;
 	for(int _t=0; _t<iter; _t++)
 	{
+		auto _t01 = time(NULL);
 		/*if(flag_print)
 		{
 			cout<<"Iteration "<<_t<<", value of z:"<<endl;
@@ -1899,6 +1902,8 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 		// vector<FieldType> t2;
 		// helper->openShare(dim,shareOfZ,t2);
 		// outputPhase(t2,to_string(_t*2+1));
+		auto _t02 = time(NULL);
+		cout<<"RunLasso Iteration real time:"<<_t02-_t01<<endl;
 	}//end of iter
 	if(res.size()<dim)
 		res.resize(dim);
@@ -1966,6 +1971,7 @@ template <class FieldType> void CompareGate<FieldType>::run() {
 	int tottme = 0;
 	if(flag_print)
 		cout<<"comparegate::running"<<endl;
+	auto _t1 = time(NULL);
 	for (iteration = 0; iteration < times; iteration++) {
 
 		auto t1start = high_resolution_clock::now();
@@ -1981,7 +1987,9 @@ template <class FieldType> void CompareGate<FieldType>::run() {
 		protocolTimer->totalTimeArr[iteration] = duration;
 		tottme += duration;
 	}
+	auto _t2 = time(NULL);
 	cout<<"Total time:"<<tottme<<endl;
+	cout<<"run() Total Real time"<<_t2<<endl;
 	// cout<<"Gates:"<<numOfMultGates + numOfCompareGates<<endl;
 	// cout<<"Ave time:"<<(double)tottme / times / (numOfMultGates + numOfCompareGates);
 }
@@ -1991,7 +1999,11 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 		cout<<"runOffline()"<<endl;
 	auto t1 = high_resolution_clock::now();
 	timer->startSubTask("preparationPhase", iteration);
+	auto _t1 = time(NULL);
 	readLassoInputs();
+	auto _t2 = time(NULL);
+	cout<<"reading real time:"<<_t2-_t1<<endl;
+	_t1 = time(NULL);
 	int dim = _Ai.size();
 	int cnt = 6 * dim * dim  * n_iter * eleSize;
 	//if(flag_print)
@@ -2008,9 +2020,14 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 			cout << "finish Preparation Phase" << '\n';
 		}
 	}
+	_t2 = time(NULL);
+	cout<<"Preparation real time:"<<_t2-_t1<<endl;
+	_t1=time(NULL);
 	cout<<"generating bit"<<endl;
 	int cnt_bit = 27 * n_iter * dim * dim / 10;
 	generateBitShares(cnt_bit);
+	_t2 = time(NULL);
+	cout<<"Generating Bit time:"<<_t2-_t1<<endl;
 	cout<<"bit generation done"<<endl;
 	timer->endSubTask("preparationPhase", iteration);
 	auto t2 = high_resolution_clock::now();
