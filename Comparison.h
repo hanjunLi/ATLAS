@@ -36,7 +36,7 @@ class CompareGate
 		int _kappa = 0;
 		int iteration;
 		int m_partyID;
-		int numThreads = 4;
+		int numThreads = 8;
 		TemplateField<FieldType> *field; // used to call some field functions
 		vector<vector<FieldType> > _Ai;
 		vector<FieldType> _bi;
@@ -67,9 +67,9 @@ class CompareGate
 		// compare the function (a < p/2)
 		void compHalfP(vector<FieldType> &a, vector<FieldType> &dest);
 		// compute square inverse of a given element
-		void compSqrInverse(vector<FieldType> &a, vector<FieldType> &res, vector<FieldType> &divs);
+		void compSqrInverse(vector<FieldType> &a, vector<FieldType> &divs);
 		//notice: only supported for Mersenne128
-		void compSqrInverse_SingleThread(vector<FieldType> &a, vector<FieldType> &res, vector<FieldType> &divs, int threadId);
+		void compSqrInverse_SingleThread(vector<FieldType> &a, vector<FieldType> &divs, int threadId);
 		//FieldType compSqrInverse(FieldType &a);
 		//save the prefix or of array a to array res
 		void compPrefixOr(vector<vector<FieldType> > &a, vector<vector<FieldType> > &res);
@@ -240,12 +240,12 @@ CompareGate<FieldType>::~CompareGate()
 {
 }
 template<class FieldType>
-void CompareGate<FieldType>::compSqrInverse_SingleThread(vector<FieldType> &a, vector<FieldType> &res, vector<FieldType> &divs, int threadId)
+void CompareGate<FieldType>::compSqrInverse_SingleThread(vector<FieldType> &a, vector<FieldType> &divs, int threadId)
 {
 }
 
 template<>
-inline void CompareGate<ZpMersenne127Element>::compSqrInverse_SingleThread(vector<ZpMersenne127Element> &a, vector<ZpMersenne127Element> &res, vector<ZpMersenne127Element> & divs,int threadId)
+inline void CompareGate<ZpMersenne127Element>::compSqrInverse_SingleThread(vector<ZpMersenne127Element> &a, vector<ZpMersenne127Element> & divs,int threadId)
 {
 	int tot = a.size();
 	for(int i = threadId; i<tot; i+=numThreads)
@@ -255,20 +255,22 @@ inline void CompareGate<ZpMersenne127Element>::compSqrInverse_SingleThread(vecto
 			tmp = tmp * tmp;
 		tmp2 = tmp + tmp;
 		if(tmp2.elem < tmp.elem) tmp = ZpMersenne127Element(0) - tmp;
-		res[i] = tmp;
-		divs[i] = ZpMersenne127Element(1) / tmp;
+		if(tmp!=ZpMersenne127Element(0)) divs[i] = ZpMersenne127Element(1) / tmp;
+		else divs[i] = 0;
 	}
 }
 //warning: this may not be pure random. Please Use Specified version of ZZ_p and ZpMersenne127
 	template <class FieldType>
-void CompareGate<FieldType>::compSqrInverse(vector<FieldType> &num,vector<FieldType> &res, vector<FieldType> &divs)
+void CompareGate<FieldType>::compSqrInverse(vector<FieldType> &num, vector<FieldType> &divs)
 {
-	if(res.size()<num.size()) res.resize(num.size());
+	//if(res.size()<num.size()) res.resize(num.size());
 	if(divs.size()<num.size()) divs.resize(num.size());
 	for(int i=0; i<num.size(); i++)
 	{
-		res[i] = num[i].sqrt();
-		divs[i] = FieldType(1) / res[i];
+		//res[i] = num[i].sqrt();
+		FieldType tmp = num[i].sqrt();
+		if(tmp!=FieldType(0)) divs[i] = FieldType(1) / tmp; //res[i];
+		else divs[i] = 0;
 		//if(res[i] + res[i] < res[i]) res[i] = FieldType(0) - res[i];
 	}
 }
@@ -276,7 +278,7 @@ void CompareGate<FieldType>::compSqrInverse(vector<FieldType> &num,vector<FieldT
 //since we don't use ZZ_p,
 //this is badly implemented, with very low efficiency.
 	template<>
-inline void CompareGate<ZZ_p>::compSqrInverse(vector<ZZ_p> &num,vector<ZZ_p> &res, vector<ZZ_p> &divs)
+inline void CompareGate<ZZ_p>::compSqrInverse(vector<ZZ_p> &num, vector<ZZ_p> &divs)
 {
 	//the mod is 2147483647
 	//we don't need to init ZZ (?)
@@ -288,15 +290,16 @@ inline void CompareGate<ZZ_p>::compSqrInverse(vector<ZZ_p> &num,vector<ZZ_p> &re
 	//if(flag_print)
 	//	cout<<"Times:"<<tmp<<endl;
 	int tot=num.size();
-	if(res.size()<tot)
-		res.resize(tot);
+	//if(res.size()<tot)
+	//	res.resize(tot);
 	if(divs.size()<tot)
 		divs.resize(tot);
 	for(int i=0; i<num.size(); i++)
 	{
-		res[i] = power(num[i],tmp);
-		if(conv<ZZ>(res[i] + res[i]) < conv<ZZ>(res[i])) res[i] = ZZ_p(0) - res[i];
-		divs[i] = 1 / res[i];
+		ZZ_p t0 = power(num[i],tmp);
+		if(conv<ZZ>(t0+t0) < conv<ZZ>(t0)) t0 = ZZ_p(0) - t0;
+		if(t0!=0) divs[i] = 1 / t0;
+		else divs[i] = 0;
 	}
 	
 	//ZZ_p x = power(num,tmp); //qpow(num,tmp); //power(num,tmp);
@@ -306,10 +309,10 @@ inline void CompareGate<ZZ_p>::compSqrInverse(vector<ZZ_p> &num,vector<ZZ_p> &re
 }
 
 template<>
-inline void CompareGate<ZpMersenne127Element>::compSqrInverse(vector<ZpMersenne127Element> &num, vector<ZpMersenne127Element> &res, vector<ZpMersenne127Element> &divs)
+inline void CompareGate<ZpMersenne127Element>::compSqrInverse(vector<ZpMersenne127Element> &num, vector<ZpMersenne127Element> &divs)
 {
 	int tot = num.size();
-	if(res.size()<tot) res.resize(tot);
+	//if(res.size()<tot) res.resize(tot);
 	if(divs.size()<tot) divs.resize(tot);
 	//multithreading here
 	vector<thread> threads;
@@ -317,7 +320,7 @@ inline void CompareGate<ZpMersenne127Element>::compSqrInverse(vector<ZpMersenne1
 	{
 		threads.resize(numThreads-1);
 		for(int t=0; t<numThreads - 1; t++)
-			threads[t] = thread(&CompareGate::compSqrInverse_SingleThread, this, ref(num), ref(res), ref(divs), t+1);
+			threads[t] = thread(&CompareGate::compSqrInverse_SingleThread, this, ref(num),  ref(divs), t+1);
 	}
 	//(md+1)/4: **2 for 125 times
 	
@@ -328,8 +331,9 @@ inline void CompareGate<ZpMersenne127Element>::compSqrInverse(vector<ZpMersenne1
 			tmp = tmp * tmp;
 		tmp2 = tmp + tmp;
 		if(tmp2.elem < tmp.elem) tmp = ZpMersenne127Element(0) - tmp;
-		res[i]=tmp;
-		divs[i] = ZpMersenne127Element(1) / tmp;
+		//res[i]=tmp;
+		if(tmp!=ZpMersenne127Element(0)) divs[i] = ZpMersenne127Element(1) / tmp;
+		else divs[i]=0;
 	}
 	if(numThreads > 1)
 	{
@@ -353,12 +357,12 @@ int CompareGate<FieldType>::generateBitShares(int num)
 	helper->getRandomShares(tot, tempShares);
 	if(flag_print)
 		cout<<"Generating random shares, #"<<tot<<endl;
-	vector<FieldType> PlainText;
+	/*vector<FieldType> PlainText;
 	if(flag_print)
 	{
 		helper->openShare(tot,tempShares,PlainText);
 		cout<<"plaintext opened"<<endl;
-	}
+	}*/
 	//now do multiplications and rule out 0 shares
 	helper->DNMultVec(tempShares,tempShares,resShares,1);
 	_append(chkA,tempShares);
@@ -375,13 +379,12 @@ int CompareGate<FieldType>::generateBitShares(int num)
 		cout<<secrets[0]<<","<<secrets[1]<<endl;
 	}
 	//for each opened, check if is 0, if not we generate the share
-	vector<FieldType> invs,divs;
-	compSqrInverse(secrets,invs,divs);
+	compSqrInverse(secrets,resShares);
 	if(flag_print)
 		cout<<"Inverse computed"<<endl;
 	FieldType inv2 = FieldType(1) / FieldType(2);
 	for(int i=0; i<tot; i++)
-		if(invs[i] != field->GetElement(0)) //valid
+		if(resShares[i] != field->GetElement(0)) //valid
 		{
 			/*if(flag_print)
 			{
@@ -405,7 +408,7 @@ int CompareGate<FieldType>::generateBitShares(int num)
 			  helper->openShare(1,tp,res);
 			  cout<<"Generated a "<<res[0]<<endl;
 			  }*/
-			_bitSharesValue[_bitShareOffset] = tempShares[i] * divs[i] * inv2 + inv2;
+			_bitSharesValue[_bitShareOffset] = tempShares[i] * resShares[i] * inv2 + inv2;
 			suc_cnt++;
 			_bitShareOffset++;
 			/*if(flag_print)
@@ -439,7 +442,8 @@ void CompareGate<FieldType>::compRandom(vector<FieldType> &a, vector<FieldType> 
 	int cnt = a.size();
 	if(flag_print)
 		cout<<"Entering compRandom with size "<<cnt<<endl;
-	vector<FieldType> c,w,x,y,tmp,tmp2,tmp3;
+	//vector<FieldType> c,w,x,y,tmp,tmp2,tmp3;
+	vector<FieldType> c,y;
 	for(int l=0; l<cnt; l++)
 	{
 		//auto gate = gates[l];
@@ -627,7 +631,7 @@ void CompareGate<FieldType>::compGivenNoPrefixOr(vector<vector<FieldType> > &x, 
 		cout<<"INVALID PARM for compGiven"<<endl;
 		abort();
 	}
-	vector<FieldType> d0,d1;
+	//vector<FieldType> d0,d1;
 	//vector<ZZ_p> d0,d1;
 	int tot = x.size();
 	if(flag_print)
@@ -688,7 +692,7 @@ void CompareGate<FieldType>::computeAnswer(vector<vector<FieldType> > &b,vector<
 		cout<<"Entering compAnswer with "<<b.size()<<endl;
 	if(res.size()<b.size())
 		res.resize(b.size());
-	vector<FieldType> veca,vecb,vecres,tmpans;
+	vector<FieldType> veca,vecb,vecres;
 	int _cnt=0;
 	//all length should be even, since we have length 32 here
 	for(int l=0; l<tot; l++)
@@ -734,12 +738,12 @@ void CompareGate<FieldType>::computeAnswer(vector<vector<FieldType> > &b,vector<
 		}
 	//call sub to get answer
 	if(B.size()>0)
-		computeAnswer(B,C,tmpans);
+		computeAnswer(B,C,veca);
 	//restore answer
 	for(int l=0,_t=0; l<tot; l++)
 		if(b[l].size()>1)
 		{
-			res[l] = tmpans[_t];
+			res[l] = veca[_t];
 			_t++;
 		}
 }
@@ -841,7 +845,7 @@ void CompareGate<FieldType>::compHalfP(vector<FieldType> &X,vector<FieldType> &d
 	//we want to compute ([2x]_0)
 	int tot = X.size();
 	//step 1: generate [r]_B and [r]_p
-	vector<FieldType> r,d0,d1;
+	vector<FieldType> r;//d0,d1;
 	vector<vector<FieldType> > rBits;
 	//vector<ZZ_p> r;
 	//vector<vector<ZZ_p> > rBits;
@@ -901,12 +905,12 @@ void CompareGate<FieldType>::compHalfP(vector<FieldType> &X,vector<FieldType> &d
 	//c = tmpvec[0];
 	//step 3: compute [c <_b r]
 	//vector<ZZ_p> comp_res;
-	vector<FieldType> comp_res;
+	//vector<FieldType> comp_res;
 	//compGiven(rBits,tmpvec,comp_res);
-	compGivenNoPrefixOr(rBits,tmpvec,comp_res);
+	compGivenNoPrefixOr(rBits,tmpvec,resvec);
 	if(flag_print)
 		cout<<"compGiven finished"<<endl;
-	if(comp_res.size()!=tot)
+	if(resvec.size()!=tot)
 	{
 		cout<<"Invalid compGiven length"<<endl;
 		abort();
@@ -921,11 +925,11 @@ void CompareGate<FieldType>::compHalfP(vector<FieldType> &X,vector<FieldType> &d
 		else rescr0.push_back(field->GetElement(1) - rBits[i][this->eleSize-1]);
 	}
 	//vector<ZZ_p> tmpres;
-	vector<FieldType> tmpres;
-	helper->DNMultVec(rescr0,comp_res,tmpres,1);
+	//vector<FieldType> tmpres;
+	helper->DNMultVec(rescr0,resvec,tmpvec,1);
 	_append(chkA,rescr0);
-	_append(chkB,comp_res);
-	_append(chkC,tmpres);
+	_append(chkB,resvec);
+	_append(chkC,tmpvec);
 	if(flag_print)
 		cout<<"compHalfP::Single Mult finished"<<endl;
 
@@ -934,7 +938,7 @@ void CompareGate<FieldType>::compHalfP(vector<FieldType> &X,vector<FieldType> &d
 	for(int i=0; i<tot; i++)
 	{
 		//ZZ_p tmpr = 2 * tmpres[i];
-		dest[i] = field->GetElement(1) - (comp_res[i] + rescr0[i] - field->GetElement(2) * tmpres[i]);
+		dest[i] = field->GetElement(1) - (resvec[i] + rescr0[i] - field->GetElement(2) * tmpvec[i]);
 		//dest = 1 - dest;
 	}
 	/*if(flag_print)
@@ -1433,7 +1437,7 @@ void CompareGate<FieldType>::getRandomInvPairs(int num, vector<FieldType> &b, ve
 	ctmp.resize(num);
 	for(int i=0; i<num; i++)
 		invb[i] = FieldType(1) / Bres[i] * bp[i];
-	vector<FieldType> tr,tr2;
+	//vector<FieldType> tr,tr2;
 	/*if(flag_print)
 	{
 		cout<<"genInv:validating"<<endl;
@@ -1594,7 +1598,7 @@ void CompareGate<FieldType>::SoftThres(vector<FieldType> &thres, vector<FieldTyp
 		thresPos.push_back(thres[i] + pad);
 		thresNeg.push_back(pad - thres[i]);
 	}
-	vector<FieldType> res1,res2,tmp1,tmp2,tmp3,add1,add2,add3;
+	vector<FieldType> res1,res2,tmp3,add3;
 	//test 1: a[i] ?> thres
 	//compGiven(a,thresPos,res1);
 	//compGiven(a,thresNeg,res2);
@@ -1646,17 +1650,21 @@ void CompareGate<FieldType>::SoftThres(vector<FieldType> &thres, vector<FieldTyp
 	_append(chkC,add3);
 	if(flag_print)
 		cout<<"end of mult2"<<endl;
-	for(int i=0; i<tot; i++)
+	/*for(int i=0; i<tot; i++)
 	{
 		tmp1.push_back(thres[i] * (field->GetElement(1)-res1[i]));
 		tmp2.push_back(thres[i] * (field->GetElement(1)-res2[i]));
-	}
+	}*/
 	//TruncPR(tmp1,add1);
 	//TruncPR(tmp2,add2);
 	if(res.size()<tot)
 		res.resize(tot);
 	for(int i=0; i<tot; i++)
-		res[i]= a[i] + tmp2[i] - add3[i] -tmp1[i];
+	{
+		FieldType t1 = thres[i] - thres[i] * res1[i];
+		FieldType t2 = thres[i] - thres[i] * res2[i];
+		res[i]= a[i] + t2 - add3[i] - t1;
+	}
 }
 	template<class FieldType>
 void CompareGate<FieldType>::doubleInverse(FieldType a,FieldType &res)
@@ -1955,15 +1963,18 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 		  cout<<"4(b)"<<endl;
 		  }*/
 		//step 4(b)
-		vector<FieldType> _t0,_t00;
+		//vector<FieldType> _t0,_t00;
+		tmp1.resize(dim);
 		for(int j=0; j<dim; j++)
 		{
-			_t0.push_back(field->GetElement(0));
+			tmp1[j] = field->GetElement(0);
+			//_t0.push_back(field->GetElement(0));
 			for(int i=0; i<N; i++)
-				_t0[j] = _t0[j] + shareOfW[i][j] + shareOfU[i][j];
-			_t0[j] = _t0[j] * invN; //TODO: trunc?
+				tmp1[j] = tmp1[j] + shareOfW[i][j] + shareOfU[i][j];
+			tmp1[j] = tmp1[j] * invN; //TODO: trunc?
 		}
-		TruncPR(_t0,_t00);
+		tmp2.resize(dim);
+		TruncPR(tmp1,tmp2);
 		/*if(flag_print)
 		  {
 		  cout<<"checking t0"<<endl;
@@ -1971,16 +1982,18 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 		  cout<<"t0 check passed"<<endl;
 		  }*/
 		//compute the trunc of lambda * invN * invrho
-		vector<FieldType> _t1,_t11,_t12;
+		//vector<FieldType> _t12;
 		FieldType _tmp = lambda * invN;
 		_tmp = getDiv(_tmp,1ll<<_m);
 		//_tmp = field->GetElement(transElement(_tmp) / (1ll<<_m));
 		_tmp = _tmp * invrho;
 		_tmp = getDiv(_tmp,1ll<<_m);
 		//_tmp = field->GetElement(transElement(_tmp) / (1ll<<_m));
+		tmp.resize(dim);
 		for(int j=0; j<dim; j++)
-			_t12.push_back(_tmp);
-		SoftThres(_t12, _t00, shareOfZ);
+			tmp[j] = _tmp;
+			//_t12.push_back(_tmp);
+		SoftThres(tmp, tmp2, shareOfZ);
 		/*if(flag_print)
 		  {
 		  cout<<"invN,invrho,rho,lambda:"<<endl;
@@ -2114,7 +2127,9 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	cout<<"reading real time:"<<_t2-_t1<<endl;
 	_t1 = time(NULL);
 	int dim = _Ai.size();
-	int cnt = 6 * dim * dim  * n_iter * eleSize;
+	int cnt = 40 * dim * dim  * n_iter * eleSize / 10;
+	//uncomment this for 90 * 90
+	cnt = cnt * 4 / 5;
 	//if(flag_print)
 	cout<<"Entering helper->preparation"<<endl;
 	// TODO: tighten cnt
@@ -2133,9 +2148,9 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	cout<<"Preparation real time:"<<_t2-_t1<<endl;
 	_t1=time(NULL);
 	cout<<"generating bit"<<endl;
-	int cnt_bit = 27 * n_iter * dim * dim / 10;
-	//uncomment this when running 16*16
-	cnt_bit = cnt_bit * 3 / 4;
+	int cnt_bit = 18 * n_iter * dim * dim / 10;
+	//uncomment this when running 90 * 90
+	cnt_bit = cnt_bit *6 / 7;
 	generateBitShares(cnt_bit);
 	_t2 = time(NULL);
 	cout<<"Generating Bit time:"<<_t2-_t1<<endl;
