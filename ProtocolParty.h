@@ -48,7 +48,7 @@ private:
 
   // -- additional classes and data  
   Dispute _disp;
-  HIM<FieldType> _mat_to_T, _mat_n_to_n;;
+  HIM<FieldType> _mat_to_T, _mat_T_to_n;;
   FieldType _zero;
   int _fieldByteSize;
   vector<vector<bool>> _TMasks;
@@ -203,24 +203,20 @@ public:
   Communication _comm;
 
   __inline__
-  void makeTShares(vector<FieldType>& secrets, vector<vector<FieldType>>& fullSharesVec,
-                   bool nonTZero = false) {
+  void makeTShares(vector<FieldType>& secrets, vector<vector<FieldType>>& fullSharesVec) {
     int nShares = secrets.size();
     fullSharesVec.clear();
     fullSharesVec.resize(_N, vector<FieldType>(nShares));
     vector<int> NonTSet, TSet;
     _disp.tAndNonTSetP(_myId, TSet, NonTSet);
     vector<FieldType> nonTShares(_N-_T), TShares(_T+1);
-
     for (int i=0; i<nShares; i++) {
       nonTShares[_N-_T-1] = secrets[i]; // NonTSet's end is position 0
-      if (!nonTZero) {
-        for (int j=0; j<_N-_T-1; j++) {
-          int pnt = NonTSet[j];
-          nonTShares[j] = _field->Random();
-          fullSharesVec[pnt][i] = nonTShares[j];
-        }
-      } // else: left nonT shares to zero
+      for (int j=0; j<_N-_T-1; j++) {
+        int pnt = NonTSet[j];
+        nonTShares[j] = _field->Random();
+        fullSharesVec[pnt][i] = nonTShares[j];
+      }
       _mat_to_T.MatrixMult(nonTShares, TShares);
       for (int j=0; j<_T+1; j++) {
         int pt = TSet[j];
@@ -241,8 +237,6 @@ makeRandShares(int nRands, vector<FieldType> &randShares) {
   for (int i=0; i<nBuckets; i++) {
     secrets[i] = _field->Random();
   }
-  if(flag_print)
-	  cout<<"An example of secret:"<<secrets[0]<<endl;
   vector<vector<FieldType>> randSharesAll(_N, vector<FieldType>(nBuckets));
   makeTShares(secrets, randSharesAll);
 
@@ -270,9 +264,10 @@ makeRandShares(int nRands, vector<FieldType> &randShares) {
 template <class FieldType>
 void ProtocolParty<FieldType>::
 makeRandDoubleShares(int nRands, vector<FieldType> &randSharePairs, vector<int>& kingIds) {
-  int nBuckets = (nRands / (_N - _T)) + 1;
-  randSharePairs.resize(nBuckets * (_N - _T) * 2);
-  kingIds.resize(nBuckets * (_N-_T));
+  int nExpands = (nRands + _N -1 ) / _N;
+  int nBuckets = (nExpands * _T + _T) / (_T+1);
+  randSharePairs.resize(nExpands * _N * 2);
+  kingIds.resize(nExpands * _N);
 
   vector<FieldType> secrets;
   vector<vector<FieldType>> dSharesAll, sharesAll, randSharePairsAll;
@@ -294,8 +289,8 @@ makeRandDoubleShares(int nRands, vector<FieldType> &randSharePairs, vector<int>&
   vector<vector<byte>> recBufs(_N, vector<byte>(nBuckets*_fieldByteSize*2, 0));
   _comm.allToAll(sendBufs, recBufs);
   int count = 0;
-  int king = 0;
-  vector<FieldType> bufferIn(_N), bufferIn2(_N), bufferOut(_N), bufferOut2(_N);
+  vector<FieldType> bufferIn(_N), bufferIn2(_N), bufferOut(_N), bufferOut2(_N),
+    toExpand(nBuckets*(_T+1)), toExpand2(nBuckets*(_T+1));
   for (int i=0; i<nBuckets; i++) {
     for (int j=0; j<_N; j++) {
       bufferIn[j] =
@@ -303,12 +298,28 @@ makeRandDoubleShares(int nRands, vector<FieldType> &randSharePairs, vector<int>&
       bufferIn2[j] =
         _field->bytesToElement(recBufs[j].data() + (2*i+1)*_fieldByteSize);
     }
-    _mat_n_to_n.MatrixMult(bufferIn, bufferOut);
-    _mat_n_to_n.MatrixMult(bufferIn2, bufferOut2);
-    for (int j=0; j<(_N-_T); j++) {
+    matrix_vand_transpose.MatrixMult(bufferIn, bufferOut, _N - _T);
+    matrix_vand_transpose.MatrixMult(bufferIn2, bufferOut2, _N - _T);
+    for (int j=0; j<_N-_T; j++) {
+      toExpand[count] = bufferOut[j];
+      toExpand2[count] = bufferOut2[j];
+      count++;
+    }
+  }
+  count = 0;
+  bufferIn.resize(_T);
+  bufferIn2.resize(_T);
+  for (int i=0; i<nExpands; i++) {
+    for (int j=0; j<_T; j++) {
+      bufferIn[j] = toExpand[i*_T+j];
+      bufferIn2[j] = toExpand2[i*_T+j];
+    }
+    _mat_T_to_n.MatrixMult(bufferIn, bufferOut);
+    _mat_T_to_n.MatrixMult(bufferIn2, bufferOut2);
+    for (int j=0; j<_N; j++) {
       randSharePairs[count*2] = bufferOut[j];
       randSharePairs[count*2+1] = bufferOut2[j];
-      kingIds[count++] = (king++) % _N;
+      kingIds[count++] = j;
     }
   }
 }
@@ -334,8 +345,7 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
     _field = new TemplateField<FieldType>(8);
   } else if (fieldType.compare("Zp") == 0) {
     _field = new TemplateField<FieldType>((1UL << 61) -1);
-  } else if (fieldType.compare("ZpMersenne127")==0)
-  {
+  } else if (fieldType.compare("ZpMersenne127")==0) {
 	  _field = new TemplateField<FieldType>(0);
   }
   string circuitFile =
@@ -845,12 +855,7 @@ void ProtocolParty<FieldType>::getRandomShares(
                               numOfRandoms);
 
   _singleSharesOffset += numOfRandoms;
-  if(flag_print)
-	  cout<<"Used #single:"<<_singleSharesOffset<<"/"<<_singleSharesArray.size()<<endl;
 }
-
-
-
 
 template <class FieldType>
 void ProtocolParty<FieldType>::initializationPhase() {
@@ -891,8 +896,8 @@ void ProtocolParty<FieldType>::initializationPhase() {
     alpha_2n[i] = _field->GetElement(i + 1);
     alpha_2n[i+_N] = _field->GetElement(i+_N+1);
   }
-  _mat_n_to_n.allocate(_N, _N, _field);
-  _mat_n_to_n.InitHIMVectorAndsizes(alpha_2n, _N, _N);
+  _mat_T_to_n.allocate(_N, _T, _field);
+  _mat_T_to_n.InitHIMVectorAndsizes(alpha_2n, _T, _N);
 
   matForRefresh(_myId, _mat_to_T);
 
@@ -1216,27 +1221,22 @@ batchMultSingle(vector<FieldType>& e2Shares, vector<FieldType>& e1Shares) {
   }
 
   vector<vector<FieldType>> eSharesAll(_N, vector<FieldType>(myLoad, _zero));
-  makeTShares(secrets, eSharesAll, true);
+  makeTShares(secrets, eSharesAll);
 
   vector<vector<byte>>
     e1SharesByte(_N, vector<byte>(maxLoad * _fieldByteSize, 0)),
     sendBufs(_N, vector<byte>(maxLoad * _fieldByteSize, 0));
   for (int i=0; i < _N; i++) {
-    if (_TMasks[_myId][i]) {
-      _field->elementVectorToByteVector(eSharesAll[i], sendBufs[i]);
-    }
+    _field->elementVectorToByteVector(eSharesAll[i], sendBufs[i]);
   }
-  _comm.allToT (sendBufs, e1SharesByte);
+  _comm.allToAll(sendBufs, e1SharesByte);
   // -- convert byte to elements
   vector<int> idx(_N, 0);
-  e1Shares.clear();
-  e1Shares.resize(nMults, _zero);
+  e1Shares.resize(nMults);
   for (int i = 0; i < nMults; i++) {
     int king = _doubleKingIds[i + _doubleOffset];
-    if (_TMasks[king][_myId]) {
-      e1Shares[i] = _field->bytesToElement(e1SharesByte[king].data() +
-                                           (idx[king]++) * _fieldByteSize);
-    }
+    e1Shares[i] = _field->bytesToElement(e1SharesByte[king].data() +
+                                         (idx[king]++) * _fieldByteSize);
   }
 }
 
@@ -1274,7 +1274,6 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
   }
 
   _doubleSharesOffset += numOfMults;
-  //cout<<"Used double:"<<_doubleSharesOffset<<"/"<<_doubleSharesArray.size()<<endl;
 }
 
 template <class FieldType>
