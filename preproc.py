@@ -4,6 +4,7 @@ from sklearn import linear_model
 from scipy import linalg
 
 n_train = 463715
+n_train = 3000
 n_test = 51630
 # -- global trainning data and parameters
 # data = np.genfromtxt("small_data.txt",delimiter=',')
@@ -12,7 +13,7 @@ data_train = data[:n_train]
 # data_train = data[:463715]
 data_test = data[n_train:n_train + n_test]
 # data_test = data[463715:]
-nParties = 5
+nParties = 3
 nFeatures = 90  # TODO: should be 90
 nIter = 10                      # TODO: experiment and change this
 param_rho = 10                  # TODO: experiment and change this

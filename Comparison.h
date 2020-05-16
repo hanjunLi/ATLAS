@@ -45,6 +45,10 @@ class CompareGate
 		Measurement *timer;
 		ProtocolTimer *protocolTimer;
 		string inputsFile;
+		int TruncPR_t = 0;
+		int Compare_t = 0; 
+		int Mult_t = 0;
+		int Veri_t = 0;
 	public:
 		CompareGate(ProtocolParty<FieldType> *ptr,int siz,int blk_siz,int m_partyID,TemplateField<FieldType> *field,int n,string inputf);
 		~CompareGate();
@@ -346,6 +350,7 @@ inline void CompareGate<ZpMersenne127Element>::compSqrInverse(vector<ZpMersenne1
 	template <class FieldType>
 int CompareGate<FieldType>::generateBitShares(int num)
 {
+	auto _t1 = high_resolution_clock::now();
 	int suc_cnt=0;
 	_bitShareOffset = 0;
 	//we pick out 2*required bits
@@ -373,6 +378,7 @@ int CompareGate<FieldType>::generateBitShares(int num)
 
         verificationPhase();    // fix: verify before open mult results
 	helper->openShare(tot,resShares,secrets);
+	auto _t2 = high_resolution_clock::now();
 	if(flag_print)
 	{
 		cout<<"Share Opened in GenB(),"<<tot<<endl;
@@ -380,6 +386,7 @@ int CompareGate<FieldType>::generateBitShares(int num)
 	}
 	//for each opened, check if is 0, if not we generate the share
 	compSqrInverse(secrets,resShares);
+	auto _t3 = high_resolution_clock::now();
 	if(flag_print)
 		cout<<"Inverse computed"<<endl;
 	FieldType inv2 = FieldType(1) / FieldType(2);
@@ -430,6 +437,10 @@ int CompareGate<FieldType>::generateBitShares(int num)
 	//	cout<<i<<" failed"<<endl;
 	if(flag_print)
 		cout<<"Bit Generate done"<<endl;
+	auto _t4 = high_resolution_clock::now();
+	cout<<"Mult time:"<<duration_cast<microseconds>(_t2-_t1).count()<<endl;
+	cout<<"Inv time:"<<duration_cast<microseconds>(_t3-_t2).count()<<endl;
+	cout<<"Mult time:"<<duration_cast<microseconds>(_t4-_t3).count()<<endl;
 	_bitShareOffset = 0;
 	return suc_cnt;
 }
@@ -438,6 +449,8 @@ int CompareGate<FieldType>::generateBitShares(int num)
 	template<class FieldType>
 void CompareGate<FieldType>::compRandom(vector<FieldType> &a, vector<FieldType> &b, vector<FieldType> &res)
 {
+	auto _t0 = high_resolution_clock::now();
+	//auto _t0 = clock();
 	//here a,b,c means the *share* [a],[b],[c] that are hold by this party
 	int cnt = a.size();
 	if(flag_print)
@@ -503,6 +516,8 @@ void CompareGate<FieldType>::compRandom(vector<FieldType> &a, vector<FieldType> 
 	// 	//helper->gateShareArr[gate.output] = tmp3[l] + FieldType(1) - y[l] - x[l] + tmp[l];
 	// 	res[l] = tmp3[l] + FieldType(1) - y[l] - x[l] + tmp[l];
 	// }
+	auto _t1 = high_resolution_clock::now();
+	Compare_t += duration_cast<microseconds>(_t1 - _t0).count();
 }
 // given known element c and binary share a, store (c<a) to dest
 /*	template<class FieldType>
@@ -1508,6 +1523,7 @@ void CompareGate<FieldType>::TruncPR(vector<FieldType> &a,vector<FieldType> &res
 	  inline void CompareGate<ZZ_p>::TruncPR(vector<ZZ_p> &a,vector<ZZ_p> &res)
 	 */
 {
+	auto _t0 = high_resolution_clock::now();
 	int tot = a.size();
 	//step 1: generate r and r'
 	int m = _m; // # of decimal digits
@@ -1556,6 +1572,8 @@ void CompareGate<FieldType>::TruncPR(vector<FieldType> &a,vector<FieldType> &res
 		// res[i] = (a[i] - r2open[i] + r1[i]) * twom;
                 res[i] = (a[i] - r2open[i] + r1[i]) * inv2ToM;
 	}
+	auto _t1 = high_resolution_clock::now();
+	TruncPR_t += duration_cast<microseconds>(_t1 - _t0).count();
 	/*
 	   int tot = a.size();
 	   if(res.size()<tot)
@@ -1722,7 +1740,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	//step 1: send and receive shares of Ai, bi, w, z and u 
 	if(flag_print)
 		cout<<"Lasso:step 1:"<<endl;
-	auto _t01 = time(NULL);
+	auto _t01 = high_resolution_clock::now();
         // send input: flat(Ai) || bi || u (= 0) || w (= 0)
         int sendSize = dim*dim + dim*3;
         vector<vector<FieldType>> sendBufsElements;
@@ -1842,8 +1860,8 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	cout<<Ai[0][i]<<"->"<<_ans[i]<<endl;
 	}*/
 	//start iteration.
-	auto _t02 = time(NULL);
-	cout<<"runLasso:preparation time:"<<_t02-_t01<<endl;
+	auto _t02 = high_resolution_clock::now();
+	cout<<"runLasso:preparation time:"<<duration_cast<microseconds>(_t02-_t01).count()<<endl;
 	for(int _t=0; _t<iter; _t++)
 	{
 		auto _t01 = time(NULL);
@@ -2111,7 +2129,7 @@ template <class FieldType> void CompareGate<FieldType>::run() {
 	}
 	auto _t2 = time(NULL);
 	cout<<"Total time:"<<tottme<<endl;
-	cout<<"run() Total Real time"<<_t2<<endl;
+	cout<<"run() Total Real time"<<_t2-_t1<<endl;
 	// cout<<"Gates:"<<numOfMultGates + numOfCompareGates<<endl;
 	// cout<<"Ave time:"<<(double)tottme / times / (numOfMultGates + numOfCompareGates);
 }
@@ -2203,11 +2221,15 @@ template <class FieldType> void CompareGate<FieldType>::runOnline() {
 
 	duration = duration_cast<milliseconds>(t2 - t1).count();
 	protocolTimer->outputPhaseArr[iteration] = duration;
+	cout<<"TruncPR time:"<<TruncPR_t<<endl;
+	cout<<"Compare time:"<<Compare_t<<endl;
+	cout<<"Veri time:"<<Veri_t<<endl;
 }
 
 	template<class FieldType>
 void CompareGate<FieldType>::verificationPhase()
 {
+	auto _t1 = high_resolution_clock::now();
 	FieldType l = helper->randomCoin();
 	FieldType r = l;
 	FieldType c(0);
@@ -2224,6 +2246,8 @@ void CompareGate<FieldType>::verificationPhase()
 	chkA.clear();
 	chkB.clear();
 	chkC.clear();
+	auto _t2 = high_resolution_clock::now();
+	Veri_t += duration_cast<microseconds>(_t2-_t1).count();
 }
 
 //only party 0 outputs

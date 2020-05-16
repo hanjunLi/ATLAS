@@ -16,15 +16,17 @@ for _ in range(data.shape[0]):
         data_test.append(data[_])
     else:
         data_train.append(data[_])
+n_train = 3000
 data_train = np.array(data_train)
 data_test = np.array(data_test)
+data_train = data_train[:n_train]
 #data_train = data[:n_train]
 # data_train = data[:463715]
 #data_test = data[i * 100 for i in range(40000)]
 # data_test = data[463715:]
 nParties = 3
 nFeatures = 16  # TODO: should be 16
-nIter = 30                      # TODO: experiment and change this
+nIter = 10                      # TODO: experiment and change this
 param_rho = 10                  # TODO: experiment and change this
 param_lamb = 0.1                # TODO: experiment and change this
 max_num = 0
