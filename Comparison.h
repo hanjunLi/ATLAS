@@ -431,6 +431,7 @@ int CompareGate<FieldType>::generateBitShares(int num)
 	return suc_cnt;
 }
 
+
 	template<class FieldType>
 void CompareGate<FieldType>::compRandom(vector<FieldType> &a, vector<FieldType> &b, vector<FieldType> &res)
 {
@@ -459,10 +460,16 @@ void CompareGate<FieldType>::compRandom(vector<FieldType> &a, vector<FieldType> 
 	  helper->openShare(3,d0,d1);
 	  cout<<d1[0]<<","<<d1[1]<<","<<d1[2]<<endl;
 	  }*/
-	compHalfP(a,w);
+	// compHalfP(a,w);
 	//	cout<<"Entering comphalf 2"<<endl;
-	compHalfP(b,x);
+	// compHalfP(b,x);
 	compHalfP(c,y);
+        // NOTE: since we always trunc values, will never get > p/2
+        FieldType _one = field->GetElement(1);
+        res.resize(cnt);
+        for (int i=0; i<cnt; i++) {
+          res[i] = _one - y[i];
+        }
 	/*if(flag_print)
 	  {
 	  cout<<"checking compHalfP results:"<<endl;
@@ -474,24 +481,24 @@ void CompareGate<FieldType>::compRandom(vector<FieldType> &a, vector<FieldType> 
 	//    cout<<"Exiting compHalf"<<endl;
 	//two innovations since we need to compute xy and w*(x+y-2xy)
 	//first round: compute xy
-	helper->DNMultVec(x,y,tmp,1);
-	_append(chkA,x);
-	_append(chkB,y);
-	_append(chkC,tmp);
-	for(int l=0; l<cnt; l++)
-		tmp2.push_back(x[l] + y[l] - FieldType(2) * tmp[l]);
-	helper->DNMultVec(w,tmp2,tmp3,1);
-	_append(chkA,w);
-	_append(chkB,tmp2);
-	_append(chkC,tmp3);
-	if(res.size()<cnt)
-		res.resize(cnt);
-	for(int l=0; l<cnt; l++)
-	{
-		//auto gate = gates[l];
-		//helper->gateShareArr[gate.output] = tmp3[l] + FieldType(1) - y[l] - x[l] + tmp[l];
-		res[l] = tmp3[l] + FieldType(1) - y[l] - x[l] + tmp[l];
-	}
+	// helper->DNMultVec(x,y,tmp,1);
+	// _append(chkA,x);
+	// _append(chkB,y);
+	// _append(chkC,tmp);
+	// for(int l=0; l<cnt; l++)
+	// 	tmp2.push_back(x[l] + y[l] - FieldType(2) * tmp[l]);
+	// helper->DNMultVec(w,tmp2,tmp3,1);
+	// _append(chkA,w);
+	// _append(chkB,tmp2);
+	// _append(chkC,tmp3);
+	// if(res.size()<cnt)
+	// 	res.resize(cnt);
+	// for(int l=0; l<cnt; l++)
+	// {
+	// 	//auto gate = gates[l];
+	// 	//helper->gateShareArr[gate.output] = tmp3[l] + FieldType(1) - y[l] - x[l] + tmp[l];
+	// 	res[l] = tmp3[l] + FieldType(1) - y[l] - x[l] + tmp[l];
+	// }
 }
 // given known element c and binary share a, store (c<a) to dest
 /*	template<class FieldType>
@@ -1504,7 +1511,8 @@ void CompareGate<FieldType>::TruncPR(vector<FieldType> &a,vector<FieldType> &res
 	int kappa = _kappa;
 	FieldType khalf(1ull<<(k-1));
 	khalf= khalf * khalf;
-	FieldType twom(1ull<<_m);
+	// FieldType twom(1ull<<_m);
+        FieldType inv2ToM = FieldType(1) / FieldType(1ull<<_m);
 	vector<FieldType> r,r1,r2,r2open;
 	vector<vector<FieldType> > rBits;
 	//vector<ZZ_p> r,r1,r2,r2open;
@@ -1541,7 +1549,8 @@ void CompareGate<FieldType>::TruncPR(vector<FieldType> &a,vector<FieldType> &res
 	for(int i=0; i<tot; i++)
 	{
 		r2open[i] = field->GetElement(getMod(r2open[i],1ull<<m));
-		res[i] = (a[i] - r2open[i] + r1[i]) / twom;
+		// res[i] = (a[i] - r2open[i] + r1[i]) * twom;
+                res[i] = (a[i] - r2open[i] + r1[i]) * inv2ToM;
 	}
 	/*
 	   int tot = a.size();
@@ -1613,6 +1622,7 @@ void CompareGate<FieldType>::SoftThres(vector<FieldType> &thres, vector<FieldTyp
 		res2[i] = FieldType(1) - res2[i];*/
 	compRandom(b, thresPos,res1);
 	compRandom(thresNeg, b,res2);
+
 	/*if(flag_print)
 	{
 		cout<<"SoftThres: checking result of comprandom"<<endl;
@@ -2005,8 +2015,9 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	}//end of iter
 	if(res.size()<dim)
 		res.resize(dim);
-	// shouldn't open w/o verify
 	// cout<<"Getting result:"<<endl;
+
+        verificationPhase();    // fix: verify before open mult results
 	helper->openShare(dim,shareOfZ,res);
 	// for(int i=0; i<dim; i++)
 	// {
@@ -2161,7 +2172,7 @@ template <class FieldType> void CompareGate<FieldType>::runOnline() {
 	t1 = high_resolution_clock::now();
 	timer->startSubTask("VerificationPhase", iteration);
 	//ONLY FOR TEST PURPOSE
-	verificationPhase();
+	// verificationPhase();
 	if (flag_print)
 		cout << "verification finished" << endl;
 	timer->endSubTask("VerificationPhase", iteration);
