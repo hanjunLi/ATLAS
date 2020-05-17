@@ -84,6 +84,7 @@ class CompareGate
 		///////////////////////////////////////
 		//only used for multiplication prod. Par: m and k
 		void TruncPR(vector<FieldType> &a,vector<FieldType> &res);//vector<int> &k,vector<int> &m);
+                void TruncPRSecure(vector<FieldType> &a,vector<FieldType> &res);
 		void doubleVecMult(vector<FieldType> &a,vector<FieldType> &b,vector<FieldType> &res);
 		void SoftThres(vector<FieldType> &thres, vector<FieldType> &a, vector<FieldType> &res);
 
@@ -712,8 +713,8 @@ void CompareGate<FieldType>::computeAnswer(vector<vector<FieldType> > &b,vector<
 	//all length should be even, since we have length 32 here
 	for(int l=0; l<tot; l++)
 	{
-		if(flag_print)
-			cout<<"No "<<l<<", length:"<<b[l].size()<<endl;
+		// if(flag_print)
+		// 	cout<<"No "<<l<<", length:"<<b[l].size()<<endl;
 		if(b[l].size()==1) //the answer is c_1
 			res[l] = c[l][0];
 		else if(b[l].size()>1)
@@ -1514,6 +1515,56 @@ inline void CompareGate<ZZ_p>::getBitDecomp(ZZ_p &a, vector<ZZ_p> &dest)
 	vector<ZZ_p> f1Bits,f2Bits,gBits;*/
 }
 
+
+template<class FieldType>
+void CompareGate<FieldType>::
+TruncPRSecure(vector<FieldType> &aShares,vector<FieldType> &res) {
+  // a perfect secure (instead of statistical secure) version:
+  // - make r a random field element instead of a ranged integer
+  // - add secure comparison for overflow
+  auto _t0 = high_resolution_clock::now();
+  int tot = aShares.size();
+  FieldType _zero = field->GetElement(0);
+  FieldType _one = field->GetElement(1);
+  FieldType _two = field->GetElement(2);
+  vector<FieldType> rShares, r1Shares(tot, _zero);
+  vector<vector<FieldType> > rBitShares; // MSB first; 128th bit fixed to zero
+  getRandomBitShare(tot,rShares,rBitShares);
+  // compute tail 2^m bits of r
+  for (int i=0; i<tot; i++) {
+    for (int j=eleSize-_m; j<eleSize; j++) {
+      r1Shares[i] = r1Shares[i] * _two + rBitShares[i][j];
+    }
+  }
+
+  // shift all negative fixed pt number to positive and pad w/ r
+  FieldType khalf(1ull<<(_k-1)); // TODO: change this if _k > 64
+  khalf= khalf * khalf;          // similar for 1ull<<_m if _m > 64
+  vector<FieldType> cShares(tot, _zero), cClear;
+  for (int i=0; i<tot; i++) {
+    cShares[i] = (khalf + aShares[i]) + rShares[i];
+  }
+  helper->openShare(tot, cShares, cClear);
+
+  // compute overflow bit (r < c) by secure comparison
+  vector<FieldType> overflowShares(tot, _zero);
+  compGivenNoPrefixOr(rBitShares, cClear, overflowShares);
+  // and compute result
+  FieldType inv2ToM = _one / FieldType(1ull<<_m);
+  res.resize(tot);
+  for (int i=0; i<tot; i++) {
+    // no overflow, c' = c1 = c mod 2^m
+    FieldType c1 = field->GetElement(getMod(cClear[i], 1ull<<_m));
+    // overflow, c' = c2 = (c + q) mod 2^m = (c + 2^k - 1) mod 2^m
+    FieldType c2 = field->GetElement(getMod(cClear[i] - _one, 1ull<<_m));
+    FieldType cpShare = (overflowShares[i]*c2 + (_one-overflowShares[i])*c1);
+    res[i]= (aShares[i] - cpShare + r1Shares[i]) * inv2ToM;
+  }
+  auto _t1 = high_resolution_clock::now();
+  TruncPR_t += duration_cast<microseconds>(_t1 - _t0).count();
+}
+
+
 	template<class FieldType>
 void CompareGate<FieldType>::TruncPR(vector<FieldType> &a,vector<FieldType> &res)
 	/*{
@@ -1592,7 +1643,8 @@ void CompareGate<FieldType>::doubleVecMult(vector<FieldType> &a,vector<FieldType
 	_append(chkB,b);
 	_append(chkC,tmp);
 	//step 2: do trunc
-	TruncPR(tmp,res);
+	// TruncPR(tmp,res);
+        TruncPRSecure(tmp,res);
 }
 
 	template<class FieldType>
@@ -1885,7 +1937,8 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 				//tmp2.push_back(rho);
 			}
 		}
-		TruncPR(tmp1,tmp);
+		// TruncPR(tmp1,tmp);
+                TruncPRSecure(tmp1,tmp);
 		//doubleVecMult(tmp1,tmp2,tmp);
 		for(int i=0,_c=0; i<N; i++)
 			for(int j=0; j<dim; j++,_c++)
@@ -1992,7 +2045,8 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 			tmp1[j] = tmp1[j] * invN; //TODO: trunc?
 		}
 		tmp2.resize(dim);
-		TruncPR(tmp1,tmp2);
+		// TruncPR(tmp1,tmp2);
+                TruncPRSecure(tmp1,tmp2);
 		/*if(flag_print)
 		  {
 		  cout<<"checking t0"<<endl;
@@ -2152,7 +2206,8 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	cout<<"Entering helper->preparation"<<endl;
 	// TODO: tighten cnt
 	// cnt *= 2;
-	if (helper->preparationPhase(cnt, cnt) == false) {
+	// if (helper->preparationPhase(cnt, cnt) == false) {
+	if (helper->preparationPhase(cnt, cnt*4) == false) {
 		if (flag_print) {
 			cout << "preparationPhase failed" << '\n';
 		}
