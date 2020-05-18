@@ -4,7 +4,7 @@ from sklearn import linear_model
 from scipy import linalg
 
 n_train = 463715
-n_train = 3000
+#n_train = 5000
 n_test = 51630
 # -- global trainning data and parameters
 # data = np.genfromtxt("small_data.txt",delimiter=',')
@@ -13,7 +13,10 @@ data_train = data[:n_train]
 # data_train = data[:463715]
 data_test = data[n_train:n_train + n_test]
 # data_test = data[463715:]
-nParties = 3
+n_train = 5000 * 80
+np.random.shuffle(data_train)
+data_train = data[:n_train]
+nParties = 5
 nFeatures = 90  # TODO: should be 90
 nIter = 10                      # TODO: experiment and change this
 param_rho = 10                  # TODO: experiment and change this
@@ -84,7 +87,7 @@ As = [np.empty((nFeatures, nFeatures))]*nParties
 bs = [np.empty(nFeatures)]*nParties
 for i in range(nParties):
     As[i], bs[i] = compress_data(Xs[i], Ys[i], param_rho)
-    fo = open("input"+str(i)+".txt", "w")
+    fo = open("input"+str(i)+"_90_"+str(n_train)+".txt", "w")
     #print(As[i].shape[0],bs[i].shape[0])
     fo.write(str(As[i].shape[0])+'\n')
     for j in range(As[i].shape[0]):
@@ -95,7 +98,8 @@ for i in range(nParties):
         if(bs[i][j] > max_num):#if(bs[i][j] > (2**(62-sft))):
             max_num = bs[i][j] #print("Too large B!")
         #    exit()
-        fo.write(str(int(bs[i][j]*sft))+' ')
+        #print(bs[i][j])
+        fo.write(str(int(sft * bs[i][j]))+' ')
     fo.write('\n')
     fo.close()
 us = [np.zeros(nFeatures)] * nParties
@@ -134,10 +138,11 @@ fo2 = open("output.txt","r")
 _z = []
 for _ in range(nFeatures):
     tmp = fo2.readline()
-    v1,v2 = map(int,tmp.split()) #should be a length-2 vector
-    curv = v1 * (2**64) + v2
-    if curv > (2**90): #negative number
-        curv = (2**127) - 1 - curv
+    v0 = list(map(int,tmp.split())) #should be a length-2 vector
+    curv = v0[0]
+    #curv = v0[0] * (2**64) + v0[1]
+    if curv > (2**300): #negative number
+        curv = (2**521) - 1 - curv
         curv = -curv
     curv = curv / sft
     _z.append(curv)

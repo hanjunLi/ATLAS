@@ -31,9 +31,9 @@ class CompareGate
 		//for safety, we use 40 bit floats
 		//fixed-point floats, 32 decimals
 		//can it work?
-		int _k = 200;
+		int _k = 62;
 		int _m = 48;
-		int _kappa = 60;
+		int _kappa = 0;
 		int iteration;
 		int m_partyID;
 		int numThreads = 8;
@@ -325,6 +325,7 @@ inline void CompareGate<ZZ_p>::compSqrInverse_SingleThread(vector<ZZ_p> &a, vect
 		ZZ_p tmp(a[i]),tmp2;
 		for(int j=0; j<519; j++)
 			tmp = tmp * tmp;
+		//tmp = tmp / (a[i]*a[i]);
 		tmp2 = tmp + tmp;
 		if(conv<ZZ>(tmp2) < conv<ZZ>(tmp)) tmp = 0 - tmp;
 		if(tmp!=0) divs[i] = 1 / tmp;
@@ -370,6 +371,7 @@ inline void CompareGate<ZZ_p>::compSqrInverse(vector<ZZ_p> &num, vector<ZZ_p> &d
 		ZZ_p tmp(num[i]),tmp2;
 		for(int j=0; j<519; j++)
 			tmp = tmp * tmp;
+		//tmp = tmp / (num[i]*num[i]);
 		tmp2 = tmp + tmp;
 		if(conv<ZZ>(tmp2) < conv<ZZ>(tmp)) tmp = 0 - tmp;
 		//res[i]=tmp;
@@ -1231,7 +1233,7 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 	else if(flag_print)
 	cout<<"First try passed!"<<endl;
 	 */
-	if(flag_print)
+	//if(flag_print)
 	{
 		cout<<"Used #bit:"<<_bitShareOffset<<"/"<<_bitSharesValue.size()<<endl;
 	}
@@ -1926,7 +1928,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	FieldType invN,invrho;
 	FieldType ZN(N);
 	doubleInverse(ZN * getPower(_m),invN);
-	doubleInverse(rho,invrho);
+	doubleInverse(rho * getPower(_m),invrho);
 	if(flag_print)
 		cout<<"InvN:"<<N<<","<<invN<<endl;
 
@@ -2082,11 +2084,11 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 			//vector<FieldType> tmp,tmp1,tmp2;
 			for(int j=0; j<dim; j++)
 			{
-				tmp1.push_back(rho * (shareOfZ[j] - shareOfU[i][j]));
+				tmp.push_back(rho * (shareOfZ[j] - shareOfU[i][j]));
 				//tmp2.push_back(rho);
 			}
 		}
-		TruncPR(tmp1,tmp);
+		//TruncPR(tmp1,tmp);
 		//TruncPRSecure(tmp1,tmp);
 		//doubleVecMult(tmp1,tmp2,tmp);
 		for(int i=0,_c=0; i<N; i++)
@@ -2100,6 +2102,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 			for(int j=0; j<dim; j++)
 			{
 				cout<<_tmp[j]<<endl;
+
 			}
 			cout<<"A[0][0] in 4(a):"<<endl;
 			helper->openShare(dim,shareOfA[0][0],_tmp);
@@ -2402,7 +2405,7 @@ template <class FieldType> void CompareGate<FieldType>::runOnline() {
 	vector<FieldType> res;
 	timer->startSubTask("ComputePhase", iteration);
 	//rho = 10, lambda = 0.1
-	runLasso(n_iter, field->GetElement((1ull<<(_m))/10), field->GetElement(10 * (1ull<<(_m))), _Ai, _bi, res);
+	runLasso(n_iter, field->GetElement((1ull<<(_m))/10), field->GetElement(10 ), _Ai, _bi, res);
 	timer->endSubTask("ComputePhase", iteration);
 	t2 = high_resolution_clock::now();
 

@@ -863,7 +863,7 @@ void ProtocolParty<FieldType>::getRandomShares(
                               numOfRandoms);
 
   _singleSharesOffset += numOfRandoms;
-  if(flag_print)
+  //if(flag_print)
 	  cout<<"Used single:"<<_singleSharesOffset<<"/"<<_singleSharesArray.size()<<endl;
 }
 
@@ -1285,7 +1285,7 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
 
   _doubleSharesOffset += numOfMults;
 
-  if(flag_print)
+  //if(flag_print)
 	  cout<<"Used #double:"<<_doubleSharesOffset<<"/"<<_doubleSharesArray.size()<<endl;
 }
 

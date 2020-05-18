@@ -3,6 +3,7 @@ import numpy as np
 from sklearn import linear_model
 from scipy import linalg
 
+n_train = 4200000
 #n_train = 4178504
 #n_test = 4200000
 # -- global trainning data and parameters
@@ -16,15 +17,16 @@ for _ in range(data.shape[0]):
         data_test.append(data[_])
     else:
         data_train.append(data[_])
-n_train = 3000
+n_train = 10000 * 400
 data_train = np.array(data_train)
 data_test = np.array(data_test)
+np.random.shuffle(data_train)
 data_train = data_train[:n_train]
 #data_train = data[:n_train]
 # data_train = data[:463715]
 #data_test = data[i * 100 for i in range(40000)]
 # data_test = data[463715:]
-nParties = 3
+nParties = 5
 nFeatures = 16  # TODO: should be 16
 nIter = 10                      # TODO: experiment and change this
 param_rho = 10                  # TODO: experiment and change this
@@ -97,7 +99,7 @@ bs = [np.empty(nFeatures)]*nParties
 for i in range(nParties):
     As[i], bs[i] = compress_data(Xs[i], Ys[i], param_rho)
     
-    fo = open("input"+str(i)+".txt", "w")
+    fo = open("input"+str(i)+"_16_"+str(n_train)+".txt", "w")
     #print(As[i].shape[0],bs[i].shape[0])
     fo.write(str(As[i].shape[0])+'\n')
     for j in range(As[i].shape[0]):
@@ -148,10 +150,11 @@ fo2 = open("output.txt","r")
 _z = []
 for _ in range(nFeatures):
     tmp = fo2.readline()
-    v1,v2 = map(int,tmp.split()) #should be a length-2 vector
-    curv = v1 * (2**64) + v2
-    if curv > (2**90): #negative number
-        curv = (2**127) - 1 - curv
+    v1 = list(map(int,tmp.split())) #should be a length-2 vector
+    curv = v1[0]
+    #curv = v1 * (2**64) + v2
+    if curv > (2**300): #negative number
+        curv = (2**521) - 1 - curv
         curv = -curv
     curv = curv / sft
     _z.append(curv)
