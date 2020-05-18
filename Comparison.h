@@ -2370,13 +2370,13 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	int cnt = 20 * dim * dim  * n_iter * eleSize / 10;
 	//cnt*=3;
 	//uncomment this for 90 * 90
-	//cnt = cnt * 4 / 5;
+	cnt = cnt * 2 / 40;
 	//if(flag_print)
 	cout<<"Entering helper->preparation"<<endl;
 	cout<<"generating single:"<<cnt<<endl;
 	// TODO: tighten cnt
 	// cnt *= 2;
-	if (helper->preparationPhase(cnt, cnt) == false) {
+	if (helper->preparationPhase(cnt, cnt*3) == false) {
 		if (flag_print) {
 			cout << "preparationPhase failed" << '\n';
 		}
@@ -2390,9 +2390,10 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	cout<<"Preparation real time:"<<_t2-_t1<<endl;
 	_t1=time(NULL);
 	cout<<"generating bit"<<endl;
-	int cnt_bit = 6 * n_iter * dim * dim / 10;
+	int cnt_bit = 18 * n_iter * dim * dim / 10;
 	//cnt_bit*=2;
 	//uncomment this when running 90 * 90
+	cnt_bit = cnt_bit / 24;
 	//cnt_bit = cnt_bit *6 / 7;
 	cout<<"#bits:"<<cnt_bit<<endl;
 	generateBitShares(cnt_bit);
