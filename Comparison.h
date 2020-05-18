@@ -37,7 +37,7 @@ class CompareGate
 		int _kappa = 60;
 		int iteration;
 		int m_partyID;
-		int numThreads = 8;
+		int numThreads = 16;
 		TemplateField<FieldType> *field; // used to call some field functions
 		vector<vector<FieldType> > _Ai;
 		vector<FieldType> _bi;
@@ -1234,7 +1234,7 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 	else if(flag_print)
 	cout<<"First try passed!"<<endl;
 	 */
-	//if(flag_print)
+	if(flag_print)
 	{
 		cout<<"Used #bit:"<<_bitShareOffset<<"/"<<_bitSharesValue.size()<<endl;
 	}
@@ -2376,7 +2376,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	cout<<"generating single:"<<cnt<<endl;
 	// TODO: tighten cnt
 	// cnt *= 2;
-	if (helper->preparationPhase(cnt, cnt*2) == false) {
+	if (helper->preparationPhase(cnt, cnt*3/2) == false) {
 		if (flag_print) {
 			cout << "preparationPhase failed" << '\n';
 		}

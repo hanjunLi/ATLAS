@@ -38,7 +38,7 @@ private:
   Interpolate<FieldType> interp; // evaluate (O(n)), interpolate polynomials (O(n^2))
 
   // -- global const
-  int numThreads = 8;      // TODO: add as main arguments later
+  int numThreads = 16;      // TODO: add as main arguments later
   int _K = 7;              // interpolation degree <=> 'shrink' factor
 
   // -- global variables
@@ -863,7 +863,7 @@ void ProtocolParty<FieldType>::getRandomShares(
                               numOfRandoms);
 
   _singleSharesOffset += numOfRandoms;
-  //if(flag_print)
+  if(flag_print)
 	  cout<<"Used single:"<<_singleSharesOffset<<"/"<<_singleSharesArray.size()<<endl;
 }
 
@@ -1285,7 +1285,7 @@ DNMultVec(vector<FieldType>& a, vector<FieldType>& b,
 
   _doubleSharesOffset += numOfMults;
 
-  //if(flag_print)
+  if(flag_print)
 	  cout<<"Used #double:"<<_doubleSharesOffset<<"/"<<_doubleSharesArray.size()<<endl;
 }
 
