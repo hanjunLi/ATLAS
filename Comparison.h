@@ -25,15 +25,16 @@ class CompareGate
 		vector<FieldType> _bitSharesValue;
 		vector<vector<FieldType> > _bitSharesBits;
 		//vector<FieldType> _zeroShares;
-		vector<FieldType> chkA,chkB,chkC;
+		 vector<FieldType> chkA,chkB,chkC, chkCVec;
+                vector<vector<FieldType>> chkAVec, chkBVec; // for inner products
 		//int _zeroShareOffset = 0;
 		int _bitShareOffset = 0;
 		//for safety, we use 40 bit floats
 		//fixed-point floats, 32 decimals
 		//can it work?
-		int _k = 62;
+		int _k = 200;
 		int _m = 48;
-		int _kappa = 0;
+		int _kappa = 60;
 		int iteration;
 		int m_partyID;
 		int numThreads = 8;
@@ -85,7 +86,7 @@ class CompareGate
 		//only used for multiplication prod. Par: m and k
 		void TruncPR(vector<FieldType> &a,vector<FieldType> &res);//vector<int> &k,vector<int> &m);
    void TruncPRSecure(vector<FieldType> &a,vector<FieldType> &res);
-		void doubleVecMult(vector<FieldType> &a,vector<FieldType> &b,vector<FieldType> &res);
+		void doubleVecMult(vector<FieldType> &a,vector<FieldType> &b,vector<FieldType> &res, int groupSize = 1);
 		void SoftThres(vector<FieldType> &thres, vector<FieldType> &a, vector<FieldType> &res);
 
 		//compute 1/a[i] under double
@@ -1730,7 +1731,6 @@ void CompareGate<FieldType>::TruncPR(vector<FieldType> &a,vector<FieldType> &res
 	   res[i]=a[i];
 	 */
 }
-
 template<class FieldType>
 void CompareGate<FieldType>::
 TruncPRSecure(vector<FieldType> &aShares,vector<FieldType> &res) {
@@ -1778,18 +1778,33 @@ TruncPRSecure(vector<FieldType> &aShares,vector<FieldType> &res) {
   auto _t1 = high_resolution_clock::now();
   TruncPR_t += duration_cast<microseconds>(_t1 - _t0).count();
 }
-	template<class FieldType> 
-void CompareGate<FieldType>::doubleVecMult(vector<FieldType> &a,vector<FieldType> &b,vector<FieldType> &res)
+template<class FieldType> 
+void CompareGate<FieldType>::doubleVecMult(vector<FieldType> &a,vector<FieldType> &b,vector<FieldType> &res, int groupSize)
 {
 	vector<FieldType> tmp;
 	//step 1: normal product
-	helper->DNMultVec(a,b,tmp,1);
-	_append(chkA,a);
-	_append(chkB,b);
-	_append(chkC,tmp);
-	//step 2: do trunc
-	TruncPR(tmp,res);
-	//TruncPRSecure(tmp,res);
+	helper->DNMultVec(a,b,tmp,groupSize);
+        if (groupSize == 1) {
+          _append(chkA, a);
+          _append(chkB, b);
+          _append(chkC, tmp);
+        } else {
+          auto aStart = a.begin();
+          auto bStart = b.begin();
+          int nGroups = (a.size() + groupSize -1) / groupSize;
+          for (int i=0; i<nGroups-1; i++) {
+            chkAVec.push_back(vector<FieldType>(aStart, aStart+groupSize));
+            chkBVec.push_back(vector<FieldType>(bStart, bStart+groupSize));
+            aStart += groupSize;
+            bStart += groupSize;
+          }
+          chkAVec.push_back(vector<FieldType>(aStart, a.end()));
+          chkBVec.push_back(vector<FieldType>(bStart, b.end()));
+          _append(chkCVec, tmp);
+        }
+        //step 2: do trunc
+	 TruncPR(tmp,res);
+    //    TruncPRSecure(tmp,res);
 }
 
 	template<class FieldType>
@@ -2131,7 +2146,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 				}
 		}
 		vector<FieldType> tmp3;
-		doubleVecMult(tmp1,tmp2,tmp3);
+		doubleVecMult(tmp1,tmp2,tmp3, dim);
 		for(int i=0,_c=0; i<N; i++)
 		{
 			for(int j=0; j<dim; j++) //fill W[i][j]
@@ -2161,9 +2176,10 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 				  for(int o=0; o<dim; o++)
 				  cout<<_tt1[o]<<"->"<<_tt2[o]<<endl;
 				  }*/
-				shareOfW[i][j] = field->GetElement(0);
-				for(int l=0; l<dim; l++,_c++)
-					shareOfW[i][j] = shareOfW[i][j] + tmp3[_c];
+      shareOfW[i][j] = tmp3[_c++];
+			//	shareOfW[i][j] = field->GetElement(0);
+				//for(int l=0; l<dim; l++,_c++)
+				//	shareOfW[i][j] = shareOfW[i][j] + tmp3[_c];
 				//_c+=dim;
 			}
 		}
@@ -2351,7 +2367,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	cout<<"reading real time:"<<_t2-_t1<<endl;
 	_t1 = time(NULL);
 	int dim = _Ai.size();
-	int cnt = 40 * dim * dim  * n_iter * eleSize / 10;
+	int cnt = 20 * dim * dim  * n_iter * eleSize / 10;
 	//cnt*=3;
 	//uncomment this for 90 * 90
 	//cnt = cnt * 4 / 5;
@@ -2374,7 +2390,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	cout<<"Preparation real time:"<<_t2-_t1<<endl;
 	_t1=time(NULL);
 	cout<<"generating bit"<<endl;
-	int cnt_bit = 18 * n_iter * dim * dim / 10;
+	int cnt_bit = 6 * n_iter * dim * dim / 10;
 	//cnt_bit*=2;
 	//uncomment this when running 90 * 90
 	//cnt_bit = cnt_bit *6 / 7;
