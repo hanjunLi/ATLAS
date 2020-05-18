@@ -2221,13 +2221,13 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	int dim = _Ai.size();
 	int cnt = 40 * dim * dim  * n_iter * eleSize / 10;
 	//uncomment this for 90 * 90
-	cnt = cnt * 2 / 10;
+	cnt = cnt * 2 / 40;
 	//if(flag_print)
 	cout<<"Entering helper->preparation"<<endl;
 	// TODO: tighten cnt
 	// cnt *= 2;
 	// if (helper->preparationPhase(cnt, cnt) == false) {
-	if (helper->preparationPhase(cnt, cnt) == false) {
+	if (helper->preparationPhase(cnt, cnt*3) == false) {
 		if (flag_print) {
 			cout << "preparationPhase failed" << '\n';
 		}
