@@ -45,7 +45,6 @@ private:
   int iteration;                       // current iteration number
   int currentCircuitLayer = 0;         // current circuit layer
   vector<FieldType> y_for_interpolate; // size = N
-
   // -- additional classes and data  
   Dispute _disp;
   HIM<FieldType> _mat_to_T, _mat_T_to_n;;
@@ -237,6 +236,11 @@ makeRandShares(int nRands, vector<FieldType> &randShares) {
   for (int i=0; i<nBuckets; i++) {
     secrets[i] = _field->Random();
   }
+  if(flag_print)
+  {
+		cout<<"generated a random element "<<secrets[0]<<endl;
+		cout<<"byte size:"<<_fieldByteSize<<endl;
+  }
   vector<vector<FieldType>> randSharesAll(_N, vector<FieldType>(nBuckets));
   makeTShares(secrets, randSharesAll);
 
@@ -344,7 +348,8 @@ ProtocolParty<FieldType>::ProtocolParty(int argc, char *argv[])
   } else if (fieldType.compare("GF2E") == 0) {
     _field = new TemplateField<FieldType>(8);
   } else if (fieldType.compare("Zp") == 0) {
-    _field = new TemplateField<FieldType>((1UL << 61) -1);
+    //_field = new TemplateField<FieldType>((1UL << 61) -1);
+    _field = new TemplateField<FieldType>(521);
   } else if (fieldType.compare("ZpMersenne127")==0) {
 	  _field = new TemplateField<FieldType>(0);
   }
@@ -555,8 +560,11 @@ buildPolyVecIndWorker(vector<FieldType>& aShares, vector<FieldType>& bShares,
                       vector< vector<FieldType> >& ASharesEval,
                       vector< vector<FieldType> >& BSharesEval,
                       int groupSize, int threadId) {
-  ZZ_p::init(ZZ((1UL << 61) -1)); // hack to init zzp
-
+  //ZZ_p::init(ZZ((1UL << 61) -1)); // hack to init zzp
+  ZZ tmp(1);
+  for(int i=1; i<=521; i++)
+	  tmp = tmp * 2;
+  ZZ_p::init(tmp-1);
   int totalLength = aShares.size();
   vector<FieldType> ySharesA;   // tmp vector
   vector<FieldType> ySharesB;   // tmp vector

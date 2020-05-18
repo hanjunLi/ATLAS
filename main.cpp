@@ -133,7 +133,7 @@ int main(int argc, char *argv[]) {
 
   else if (fieldType.compare("Zp") == 0) {
     ProtocolParty<ZZ_p> mpc_protocol(argc, argv);
-    CompareGate<ZZ_p> comp_protocol(&mpc_protocol, 64, 3,
+    CompareGate<ZZ_p> comp_protocol(&mpc_protocol, 528, 7,
                                     mpc_protocol.getMyId(), mpc_protocol.getField(), N, inp);
 
     auto t1 = high_resolution_clock::now();

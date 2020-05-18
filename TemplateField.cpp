@@ -16,14 +16,31 @@ ZpMersenne127Element TemplateField<ZpMersenne127Element>::Random()
 	t0 = t0 >> 1;
 	return ZpMersenne127Element(t0);
 }*/
-
+//warning: this is modified. Meaning Input is 1<<fieldParam - 1
+/*template<>
+ZZ_p TemplateField<ZZ_p>::Random()
+{
+	cout<<"Entering ZZ_p::random"<<endl;
+	unsigned long bas(1ull<<32);
+	ZZ_p cur(1);
+	for(int i=1; i<=17; i++)
+	{
+		unsigned long c1 = prg.getRandom32();
+		cur = cur * bas + c1;
+	}
+	return cur;
+}*/
 template <> TemplateField<ZZ_p>::TemplateField(long fieldParam) {
-
+//warning:this is incorrect assignment! (But we won't use it)
+cout<<"Entering ZZ_p::init"<<endl;
   this->fieldParam = fieldParam;
-  this->elementSizeInBytes = NumBytes(fieldParam); // round up to the next byte
+  this->elementSizeInBytes = (fieldParam-1) / 8 + 1; // round up to the next byte
   this->elementSizeInBits = this->elementSizeInBytes * 8;
-
-  ZZ_p::init(ZZ(fieldParam));
+	ZZ tmp(1);
+	for(int i=1; i<=fieldParam; i++)
+		tmp = tmp * 2;
+  tmp-=1;
+  ZZ_p::init(tmp);
 
   auto randomKey = prg.generateKey(128);
   prg.setKey(randomKey);
