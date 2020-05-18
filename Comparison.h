@@ -2370,13 +2370,13 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	int cnt = 20 * dim * dim  * n_iter * eleSize / 10;
 	//cnt*=3;
 	//uncomment this for 90 * 90
-	cnt = cnt * 2 / 20;
+	cnt = cnt * 2 / 25;
 	//if(flag_print)
 	cout<<"Entering helper->preparation"<<endl;
 	cout<<"generating single:"<<cnt<<endl;
 	// TODO: tighten cnt
 	// cnt *= 2;
-	if (helper->preparationPhase(cnt, cnt*3) == false) {
+	if (helper->preparationPhase(cnt, cnt*2) == false) {
 		if (flag_print) {
 			cout << "preparationPhase failed" << '\n';
 		}
