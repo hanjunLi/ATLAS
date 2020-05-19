@@ -1088,7 +1088,7 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 	else if(flag_print)
 	cout<<"First try passed!"<<endl;
 	 */
-	if(flag_print)
+	//if(flag_print)
 	{
 		cout<<"Used #bit:"<<_bitShareOffset<<"/"<<_bitSharesValue.size()<<endl;
 	}
@@ -1794,7 +1794,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	FieldType invN,invrho;
 	FieldType ZN(N);
 	doubleInverse(ZN * field->GetElement(1ull<<_m),invN);
-	doubleInverse(rho,invrho);
+	doubleInverse(rho * field->GetElement(1ull<<_m),invrho);
 	if(flag_print)
 		cout<<"InvN:"<<N<<","<<invN<<endl;
 
@@ -1950,12 +1950,12 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 			//vector<FieldType> tmp,tmp1,tmp2;
 			for(int j=0; j<dim; j++)
 			{
-				tmp1.push_back(rho * (shareOfZ[j] - shareOfU[i][j]));
+				tmp.push_back(rho * (shareOfZ[j] - shareOfU[i][j]));
 				//tmp2.push_back(rho);
 			}
 		}
 		// TruncPR(tmp1,tmp);
-                TruncPRSecure(tmp1,tmp);
+                //TruncPRSecure(tmp1,tmp);
 		//doubleVecMult(tmp1,tmp2,tmp);
 		for(int i=0,_c=0; i<N; i++)
 			for(int j=0; j<dim; j++,_c++)
@@ -2270,7 +2270,7 @@ template <class FieldType> void CompareGate<FieldType>::runOnline() {
 	vector<FieldType> res;
 	timer->startSubTask("ComputePhase", iteration);
 	//rho = 10, lambda = 0.1
-	runLasso(n_iter, field->GetElement((1ull<<(_m))/10), field->GetElement(10 * (1ull<<(_m))), _Ai, _bi, res);
+	runLasso(n_iter, field->GetElement((1ull<<(_m))/10), FieldType(10), _Ai, _bi, res);
 	timer->endSubTask("ComputePhase", iteration);
 	t2 = high_resolution_clock::now();
 
