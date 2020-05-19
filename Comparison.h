@@ -2224,7 +2224,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	int cnt = 40 * dim * dim  * n_iter * eleSize / 10;
 	//uncomment this for 90 * 90
 	cnt = cnt * 2 / 80;
-	cnt *= 4;
+	cnt *= 20;
 	//if(flag_print)
 	cout<<"Entering helper->preparation"<<endl;
 	// TODO: tighten cnt
@@ -2248,7 +2248,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	//uncomment this when running 90 * 90
 	cnt_bit = cnt_bit / 40;
 	//uncomment this for 16*16
-	cnt_bit*= 4;
+	cnt_bit*= 10;
 	generateBitShares(cnt_bit);
 	_t2 = time(NULL);
 	cout<<"Generating Bit time:"<<_t2-_t1<<endl;
