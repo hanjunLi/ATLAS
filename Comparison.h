@@ -2118,6 +2118,8 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 		auto _t02 = time(NULL);
 		cout<<"RunLasso Iteration real time:"<<_t02-_t01<<endl;
 	}//end of iter
+	auto _t03 = high_resolution_clock::now();
+	cout<<"runLasso real time:"<<duration_cast<microseconds>(_t03-_t02).count()<<endl;
 	if(res.size()<dim)
 		res.resize(dim);
 	// cout<<"Getting result:"<<endl;
