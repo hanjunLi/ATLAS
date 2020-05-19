@@ -1088,7 +1088,7 @@ void CompareGate<FieldType>::getRandomBitShare(int num,vector<FieldType> &res,ve
 	else if(flag_print)
 	cout<<"First try passed!"<<endl;
 	 */
-	//if(flag_print)
+	if(flag_print)
 	{
 		cout<<"Used #bit:"<<_bitShareOffset<<"/"<<_bitSharesValue.size()<<endl;
 	}
