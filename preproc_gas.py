@@ -2,29 +2,36 @@ import numpy as np
 # import matplotlib.pyplot as plt
 from sklearn import linear_model
 from scipy import linalg
-
-#n_train = 4178504
-#n_test = 4200000
+np.random.seed(41)
+n_train = 4178504
+n_test = 4200000
 # -- global trainning data and parameters
 # data = np.genfromtxt("small_data.txt",delimiter=',')
 data = np.genfromtxt("ethylene_CO.txt")
 _cnt = 0
 data_train = []
 data_test = []
+data_train = data[:n_train]
+data_test = data[n_train:n_test]
+'''
 for _ in range(data.shape[0]):
     if (_ % 100) ==0 :
         data_test.append(data[_])
     else:
         data_train.append(data[_])
-n_train = 3000
+'''
+#n_train = 10000 * 1
+'''
 data_train = np.array(data_train)
 data_test = np.array(data_test)
+np.random.shuffle(data_train)
 data_train = data_train[:n_train]
+'''
 #data_train = data[:n_train]
 # data_train = data[:463715]
 #data_test = data[i * 100 for i in range(40000)]
 # data_test = data[463715:]
-nParties = 3
+nParties = 5
 nFeatures = 16  # TODO: should be 16
 nIter = 10                      # TODO: experiment and change this
 param_rho = 10                  # TODO: experiment and change this
@@ -82,7 +89,7 @@ def preprocess_data(data_train, data_test):
     return data_train, data_test
 
 
-sft = 2**48
+sft = 2**52
 #sft = 1
 # -- initialization: step 1, 2, 3
 data_train, data_test = preprocess_data(data_train, data_test)
@@ -96,7 +103,7 @@ As = [np.empty((nFeatures, nFeatures))]*nParties
 bs = [np.empty(nFeatures)]*nParties
 for i in range(nParties):
     As[i], bs[i] = compress_data(Xs[i], Ys[i], param_rho)
-    
+    #fo = open("input"+str(i)+"_"+str(nFeatures)+"_"+str(n_train)+".txt")
     fo = open("input"+str(i)+".txt", "w")
     #print(As[i].shape[0],bs[i].shape[0])
     fo.write(str(As[i].shape[0])+'\n')
