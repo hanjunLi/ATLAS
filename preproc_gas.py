@@ -11,22 +11,27 @@ data = np.genfromtxt("ethylene_CO.txt")
 _cnt = 0
 data_train = []
 data_test = []
-data_train = data[:n_train]
-data_test = data[n_train:n_test]
+'''
+data_tmp = np.array(data)
+np.random.shuffle(data_tmp)
+data_train = data_tmp[:n_train]
+data_test = data_tmp[n_train:n_test]
+#data_train = data[:n_train]
+#data_test = data[n_train:n_test]
 '''
 for _ in range(data.shape[0]):
-    if (_ % 100) ==0 :
+    if (_ % 50) ==0 :
         data_test.append(data[_])
     else:
         data_train.append(data[_])
-'''
-#n_train = 10000 * 1
-'''
+
+n_train = 4000000
 data_train = np.array(data_train)
 data_test = np.array(data_test)
+
 np.random.shuffle(data_train)
 data_train = data_train[:n_train]
-'''
+
 #data_train = data[:n_train]
 # data_train = data[:463715]
 #data_test = data[i * 100 for i in range(40000)]
@@ -47,7 +52,7 @@ def divide_data(data_in, nParties, nFeatures):
     perPartySize = dataSize // nParties 
     cutOff = perPartySize * nParties
     X = data_in[:cutOff, 3:3 + nFeatures]
-    Y = data_in[:cutOff, 2]
+    Y = data_in[:cutOff, 1]
     Xs = X.reshape(nParties, perPartySize, nFeatures)
     Ys = Y.reshape(nParties, perPartySize)
     return Xs, Ys
@@ -78,21 +83,24 @@ def compute_error(prediction, truth):
     nPredictions = prediction.shape[0]
     return np.linalg.norm(prediction - truth)**2 / nPredictions
 
+def compute_mae(pred,tru):
+    n = pred.shape[0]
+    return sum(np.abs(pred-tru))/n
 
 def preprocess_data(data_train, data_test):
     X_average = np.average(data_train[:, 3:])
-    Y_average = np.average(data_train[:, 2])
+    Y_average = np.average(data_train[:, 1])
     data_train[:, 3:] -= X_average
-    data_train[:, 2] -= Y_average
+    data_train[:, 1] -= Y_average
     data_test[:, 3:] -= X_average
-    data_test[:, 2] -= Y_average
+    data_test[:, 1] -= Y_average
     return data_train, data_test
 
 
 sft = 2**52
 #sft = 1
 # -- initialization: step 1, 2, 3
-data_train, data_test = preprocess_data(data_train, data_test)
+#data_train, data_test = preprocess_data(data_train, data_test)
 print("preprocess done")
 # now only test first 10 feature ?
 tmp_train = data_train[:, :3+nFeatures]
@@ -147,9 +155,10 @@ for _ in range(z.shape[0]):
     print(z[_])
 # -- test accuracy
 prediction = (data_test[:, 3:3+nFeatures] @ z).round()
-truth = (data_test[:, 2]).round()
+truth = (data_test[:, 1]).round()
 l2Error = compute_error(prediction, truth)
-print("Helen prediction error: ", l2Error)
+mae = compute_mae(prediction,truth)
+print("Helen prediction error: ", l2Error,mae)
 
 fo2 = open("output.txt","r")
 _z = []
@@ -165,17 +174,19 @@ for _ in range(nFeatures):
     print(curv)
 #calculated accuracy
 prediction = (data_test[:, 3:3+nFeatures] @ _z).round()
-truth = (data_test[:, 2]).round()
+truth = (data_test[:, 1]).round()
 l2Error = compute_error(prediction, truth)
-print("My Helen prediction error: ", l2Error)
+mae=compute_mae(prediction,truth)
+print("My Helen prediction error: ", l2Error,mae)
 
 # -- baseline accuracy
 clf = linear_model.Lasso(alpha=param_lamb)
 # clf = linear_model.LinearRegression()
-clf.fit(data_train[:, 3:3+nFeatures], data_train[:, 2])
+clf.fit(data_train[:, 3:3+nFeatures], data_train[:, 1])
 sk_prediction = clf.predict(data_test[:, 3:3+nFeatures]).round()
 skl2Error = compute_error(sk_prediction, truth)
-print("sklearn prediction error: ", skl2Error)
+mae=compute_mae(sk_prediction,truth)
+print("sklearn prediction error: ", skl2Error,mae)
 
 # -- prepare input data for MPC
 for curSize in MPC_sizes:
