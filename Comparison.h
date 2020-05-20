@@ -34,7 +34,7 @@ class CompareGate
 		//fixed-point floats, 32 decimals
 		//can it work?
 		int _k = 62;
-		int _m = 48;
+		int _m = 52;
 		int _kappa = 0;
 		int iteration;
 		int m_partyID;
@@ -2224,7 +2224,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	int cnt = 40 * dim * dim  * n_iter * eleSize / 10;
 	//uncomment this for 90 * 90
 	cnt = cnt * 2 / 80;
-	//cnt *= 6;
+	cnt *= 6;
 	//if(flag_print)
 	cout<<"Entering helper->preparation"<<endl;
 	// TODO: tighten cnt
@@ -2247,7 +2247,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	int cnt_bit = 18 * n_iter * dim * dim / 10;
 	cnt_bit = cnt_bit / 40;
 	//uncomment this for 16*16
-	//cnt_bit*= 6;
+	cnt_bit*= 6;
 	generateBitShares(cnt_bit);
 	_t2 = time(NULL);
 	cout<<"Generating Bit time:"<<_t2-_t1<<endl;
