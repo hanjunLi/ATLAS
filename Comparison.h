@@ -34,7 +34,7 @@ class CompareGate
 		//fixed-point floats, 32 decimals
 		//can it work?
 		int _k = 62;
-		int _m = 52;
+		int _m = 56;
 		int _kappa = 0;
 		int iteration;
 		int m_partyID;
