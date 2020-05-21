@@ -2224,7 +2224,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	int cnt = 40 * dim * dim  * n_iter * eleSize / 10;
 	//uncomment this for 90 * 90
 	cnt = cnt * 2 / 80;
-	//cnt *= 6;
+	cnt *= 6;
 	//if(flag_print)
 	cout<<"Entering helper->preparation"<<endl;
 	// TODO: tighten cnt
@@ -2247,7 +2247,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	int cnt_bit = 18 * n_iter * dim * dim / 10;
 	cnt_bit = cnt_bit / 40;
 	//uncomment this for 16*16
-	//cnt_bit*= 6;
+	cnt_bit*= 6;
 	generateBitShares(cnt_bit);
 	_t2 = time(NULL);
 	cout<<"Generating Bit time:"<<_t2-_t1<<endl;
@@ -2274,7 +2274,7 @@ template <class FieldType> void CompareGate<FieldType>::runOnline() {
 	vector<FieldType> res;
 	timer->startSubTask("ComputePhase", iteration);
 	//rho = 10, lambda = 0.1
-	runLasso(n_iter, field->GetElement((1ull<<(_m))/10), FieldType(10), _Ai, _bi, res);
+	runLasso(n_iter, field->GetElement((1ull<<(_m))/10), FieldType(100), _Ai, _bi, res);
 	timer->endSubTask("ComputePhase", iteration);
 	t2 = high_resolution_clock::now();
 
