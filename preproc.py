@@ -2,9 +2,8 @@ import numpy as np
 # import matplotlib.pyplot as plt
 from sklearn import linear_model
 from scipy import linalg
-
+np.random.seed(41)
 n_train = 463715
-n_train = 3000
 n_test = 51630
 # -- global trainning data and parameters
 # data = np.genfromtxt("small_data.txt",delimiter=',')
@@ -13,7 +12,10 @@ data_train = data[:n_train]
 # data_train = data[:463715]
 data_test = data[n_train:n_train + n_test]
 # data_test = data[463715:]
-nParties = 3
+n_train = 5000 * 80
+np.random.shuffle(data_train)
+data_train = data_train[:n_train]
+nParties = 5
 nFeatures = 90  # TODO: should be 90
 nIter = 10                      # TODO: experiment and change this
 param_rho = 10                  # TODO: experiment and change this
@@ -60,6 +62,9 @@ def compute_error(prediction, truth):
     nPredictions = prediction.shape[0]
     return np.linalg.norm(prediction - truth)**2 / nPredictions
 
+def compute_mae(prediction, truth):
+    n = prediction.shape[0]
+    return sum(np.abs(truth - prediction)) / n
 
 def preprocess_data(data_train, data_test):
     X_average = np.average(data_train[:, 1:])
@@ -71,7 +76,7 @@ def preprocess_data(data_train, data_test):
     return data_train, data_test
 
 
-sft = 2**48
+sft = 2**52
 #sft = 1
 # -- initialization: step 1, 2, 3
 data_train, data_test = preprocess_data(data_train, data_test)
@@ -84,7 +89,8 @@ As = [np.empty((nFeatures, nFeatures))]*nParties
 bs = [np.empty(nFeatures)]*nParties
 for i in range(nParties):
     As[i], bs[i] = compress_data(Xs[i], Ys[i], param_rho)
-    fo = open("input"+str(i)+".txt", "w")
+    fo = open("input"+str(i)+".txt","w")
+    #fo = open("input"+str(i)+"_90_"+str(n_train)+".txt", "w")
     #print(As[i].shape[0],bs[i].shape[0])
     fo.write(str(As[i].shape[0])+'\n')
     for j in range(As[i].shape[0]):
@@ -117,9 +123,9 @@ for _ in range(nIter):
             max_num = z1
     # c: ui = ui + wi - z
     us = [us[i] + ws[i] - z for i in range(nParties)]
-    print("value of w",ws)
-    print("value of z",z)
-    print("value of us",us)
+    #print("value of w",ws)
+    #print("value of z",z)
+    #print("value of us",us)
 
 print("Max number:",max_num)
 for _ in range(z.shape[0]):
@@ -128,7 +134,8 @@ for _ in range(z.shape[0]):
 prediction = (data_test[:, 1:1+nFeatures] @ z).round()
 truth = (data_test[:, 0]).round()
 l2Error = compute_error(prediction, truth)
-print("Helen prediction error: ", l2Error)
+mae = compute_mae(prediction,truth)
+print("Helen prediction error: ", l2Error,mae)
 
 fo2 = open("output.txt","r")
 _z = []
@@ -146,7 +153,8 @@ for _ in range(nFeatures):
 prediction = (data_test[:, 1:1+nFeatures] @ _z).round()
 truth = (data_test[:, 0]).round()
 l2Error = compute_error(prediction, truth)
-print("My Helen prediction error: ", l2Error)
+mae = compute_mae(prediction, truth)
+print("My Helen prediction error: ", l2Error, mae)
 
 # -- baseline accuracy
 clf = linear_model.Lasso(alpha=param_lamb)
@@ -154,7 +162,8 @@ clf = linear_model.Lasso(alpha=param_lamb)
 clf.fit(data_train[:, 1:1+nFeatures], data_train[:, 0])
 sk_prediction = clf.predict(data_test[:, 1:1+nFeatures]).round()
 skl2Error = compute_error(sk_prediction, truth)
-print("sklearn prediction error: ", skl2Error)
+mae = compute_mae(sk_prediction,truth)
+print("sklearn prediction error: ", skl2Error,mae)
 
 # -- prepare input data for MPC
 for curSize in MPC_sizes:

@@ -20,15 +20,14 @@ data_test = data_tmp[n_train:n_test]
 #data_test = data[n_train:n_test]
 '''
 for _ in range(data.shape[0]):
-    if (_ % 50) ==0 :
+    if (_ % 5) ==0 :
         data_test.append(data[_])
     else:
         data_train.append(data[_])
-
-n_train = 4000000
+n_train = 10000 * 200
 data_train = np.array(data_train)
 data_test = np.array(data_test)
-
+print(data_train.shape[0])
 np.random.shuffle(data_train)
 data_train = data_train[:n_train]
 
@@ -39,7 +38,7 @@ data_train = data_train[:n_train]
 nParties = 5
 nFeatures = 16  # TODO: should be 16
 nIter = 10                      # TODO: experiment and change this
-param_rho = 10                  # TODO: experiment and change this
+param_rho = 100                # TODO: experiment and change this
 param_lamb = 0.1                # TODO: experiment and change this
 max_num = 0
 # -- MPC preparation parameters
@@ -100,7 +99,7 @@ def preprocess_data(data_train, data_test):
 sft = 2**52
 #sft = 1
 # -- initialization: step 1, 2, 3
-#data_train, data_test = preprocess_data(data_train, data_test)
+data_train, data_test = preprocess_data(data_train, data_test)
 print("preprocess done")
 # now only test first 10 feature ?
 tmp_train = data_train[:, :3+nFeatures]
@@ -111,8 +110,8 @@ As = [np.empty((nFeatures, nFeatures))]*nParties
 bs = [np.empty(nFeatures)]*nParties
 for i in range(nParties):
     As[i], bs[i] = compress_data(Xs[i], Ys[i], param_rho)
-    #fo = open("input"+str(i)+"_"+str(nFeatures)+"_"+str(n_train)+".txt")
-    fo = open("input"+str(i)+".txt", "w")
+    fo = open("input"+str(i)+"_"+str(nFeatures)+"_"+str(n_train)+".txt","w")
+    #fo = open("input"+str(i)+".txt", "w")
     #print(As[i].shape[0],bs[i].shape[0])
     fo.write(str(As[i].shape[0])+'\n')
     for j in range(As[i].shape[0]):
@@ -146,9 +145,9 @@ for _ in range(nIter):
             max_num = z1
     # c: ui = ui + wi - z
     us = [us[i] + ws[i] - z for i in range(nParties)]
-    print("value of w",ws)
-    print("value of z",z)
-    print("value of us",us)
+    #print("value of w",ws)
+    #print("value of z",z)
+    #print("value of us",us)
 
 print("Max number:",max_num)
 for _ in range(z.shape[0]):
