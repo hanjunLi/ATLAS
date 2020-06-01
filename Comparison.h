@@ -2017,7 +2017,7 @@ template <class FieldType> void CompareGate<FieldType>::runOnline() {
 
 	t1 = high_resolution_clock::now();
 	timer->startSubTask("VerificationPhase", iteration);
-    verificationPhase();
+    //verificationPhase();
 	if (flag_print)
 		cout << "verification finished" << endl;
 	timer->endSubTask("VerificationPhase", iteration);
