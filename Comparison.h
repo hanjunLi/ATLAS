@@ -1710,10 +1710,12 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	q2.push_back(shareOfB[0][0]);
 	//compRandom(q1,q2,q3);
 	TruncPRSecure(q1,q2);
+	auto _t00 = high_resolution_clock::now();
+	cout<<"TruncPR Only Time:"<<duration_cast<microseconds>(_t00-_t01).count()<<endl;
 	verificationPhase();
 	helper->openShare(1,q2,q3);
-	auto _t00 = high_resolution_clock::now();
-	cout<<"TruncPR Time:"<<duration_cast<microseconds>(_t00-_t01).count()<<endl;
+	_t00 = high_resolution_clock::now();
+	cout<<"TruncPR Total Time:"<<duration_cast<microseconds>(_t00-_t01).count()<<endl;
 	return;
 	for(int _t=0; _t<iter; _t++)
 	{
