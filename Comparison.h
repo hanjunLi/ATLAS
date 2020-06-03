@@ -1704,6 +1704,16 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	//start iteration.
 	auto _t02 = high_resolution_clock::now();
 	cout<<"runLasso:preparation time:"<<duration_cast<microseconds>(_t02-_t01).count()<<endl;
+	//the following are for testing
+	vector<FieldType> q1,q2,q3;
+	q1.push_back(shareOfA[0][0][0]);
+	q2.push_back(shareOfB[0][0]);
+	compRandom(q1,q2,q3);
+	verificationPhase();
+	helper->openShare(1,q3,q1);
+	auto _t00 = high_resolution_clock::now();
+	cout<<"CompRandom Time:"<<duration_cast<microseconds>(_t00-_t01).count()<<endl;
+	return;
 	for(int _t=0; _t<iter; _t++)
 	{
 		auto _t01 = time(NULL);
@@ -1862,6 +1872,8 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 
 	verificationPhase();    // fix: verify before open mult results
 	helper->openShare(dim,shareOfZ,res);
+	//auto _t04 = high_resolution_clock()::now();
+	//cout<<"runOnline total time:"<<duration_cast<microseconds>(_t04-_t01).count()<<endl;
 	// for(int i=0; i<dim; i++)
 	// {
 	//	cout<<res[i]<<",";
@@ -1879,6 +1891,8 @@ template <class FieldType> void CompareGate<FieldType>::readLassoInputs()
 	int n; myfile>>n;
 	if(flag_print)
 		cout<<"Read "<<n<<endl;
+	//WARNING: only for test purpose
+	n = 1;
 	//read Ai
 	_Ai.resize(n);
 	for(int i=0; i<n; i++)
@@ -1961,6 +1975,8 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	//cnt *= 6;
 	//if(flag_print)
 	cout<<"Entering helper->preparation"<<endl;
+	//warning: this line is just for testing.
+	cnt = 200;
 	// TODO: tighten cnt
 	// cnt *= 2;
 	// if (helper->preparationPhase(cnt, cnt) == false) {
@@ -1982,14 +1998,15 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	cnt_bit = cnt_bit / 40;
 	//uncomment this for 16*16
 	//cnt_bit*= 6;
+	cnt_bit = 1;
 	generateBitShares(cnt_bit);
 	_t2 = time(NULL);
 	cout<<"Generating Bit time:"<<_t2-_t1<<endl;
 	cout<<"bit generation done"<<endl;
 	timer->endSubTask("preparationPhase", iteration);
 	auto t2 = high_resolution_clock::now();
-
 	auto duration = duration_cast<milliseconds>(t2 - t1).count();
+	cout<<"Offline Time in ms:"<<duration<<endl;
 	protocolTimer->preparationPhaseArr[iteration] = duration;
 }
 
