@@ -1709,6 +1709,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	q1.push_back(shareOfA[0][0][0]);
 	q2.push_back(shareOfB[0][0]);
 	compRandom(q1,q2,q3);
+	compRandom(q1,q2,q3);
 	//TruncPRSecure(q1,q2);
 	auto _t00 = high_resolution_clock::now();
 	cout<<"compRandom Only Time:"<<duration_cast<microseconds>(_t00-_t01).count()<<endl;
