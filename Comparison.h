@@ -1976,7 +1976,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	//if(flag_print)
 	cout<<"Entering helper->preparation"<<endl;
 	//warning: this line is just for testing.
-	cnt = 200;
+	cnt = 400;
 	// TODO: tighten cnt
 	// cnt *= 2;
 	// if (helper->preparationPhase(cnt, cnt) == false) {
