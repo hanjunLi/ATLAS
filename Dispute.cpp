@@ -164,6 +164,30 @@ void Dispute::tMaskPRev(int p, vector<bool> &TMaskRev) {
   }
 }
 
+// TODO: optimize
+int Dispute::
+relayer(int pTo, int pFrom) {
+  assert(!_corr[pTo]);
+  assert(!_corr[pFrom]);
+  assert(_disp[pTo][pFrom]);
+
+  vector<int> relay;
+  vector<bool> relayerMask;
+  vector<vector<int>> relayerLoad;
+  rlyeeVecs(pTo, relay, relayerMask, relayerLoad);
+  return relay[pFrom];
+}
+
+// TODO: optimize
+bool Dispute::
+isRelayer(int p, int myId) {
+  vector<int> relay;
+  vector<bool> relayerMask;
+  vector<vector<int>> relayerLoad;
+  rlyeeVecs(p, relay, relayerMask, relayerLoad);
+  return relayerMask[myId];
+}
+
 // TODO: remember for repeated use
 bool Dispute::
 rlyeeVecs(int p, vector<int>& relay, vector<bool>& relayerMask,

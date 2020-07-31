@@ -20,6 +20,51 @@ reset(int N, int myId, int numThreads, string partiesFile, Dispute* disp_pt) {
 };
 
 void Communication::
+singleBroadcast(int king, vector<byte> &sendBuf, vector<byte> &recBuf) {
+  int recSize = recBuf.size();
+  if (_myId != king) {          // non-king receives
+    int kIdx = getChannelIdx(king);
+    _partyChannels[kIdx]->getChannel()->read(recBuf.data(), recSize);
+    return;
+  } // king sends
+
+  recBuf = sendBuf;
+  vector<vector<byte>> sendBufs(_N, sendBuf);
+  vector<thread> threads(_nCommThreads);
+  vector<bool> activeVec;
+  _disp_pt->nonCorrMask(activeVec);
+  for (int t = 0; t < _nCommThreads; t++) {
+    threads[t] =
+      thread(&Communication::wWorker, this, ref(sendBufs), ref(activeVec), t);
+  }
+  wWorker(sendBufs, activeVec, _nCommThreads);
+  for (int t = 0; t < _nCommThreads; t++) {
+    threads[t].join();
+  }
+}
+
+void Communication::
+allBroadcast(vector<byte> &sendBuf, vector<vector<byte> > &recBufs) {
+  for (int i = 0; i < _N; i++) {
+    assert(sendBuf.size() == recBufs[i].size());
+  }
+  recBufs[_myId] = sendBuf;
+  vector<vector<byte>> sendBufs(_N, sendBuf);
+  vector<thread> threads(_nCommThreads);
+  vector<bool> activeVec;
+  _disp_pt->nonCorrMask(activeVec);
+  for (int t = 0; t < _nCommThreads; t++) {
+    threads[t] =
+      thread(&Communication::rwWorker, this,
+             ref(sendBufs), ref(recBufs), ref(activeVec), ref(activeVec), t);
+  }
+  rwWorker(sendBufs, recBufs, activeVec, activeVec, _nCommThreads);
+  for (int t = 0; t < _nCommThreads; t++) {
+    threads[t].join();
+  }
+}
+
+void Communication::
 kingToT(int king, vector<byte> &myShare, vector<vector<byte>> &sendBufs) {
   // NOTE: no relay needed
   vector<bool> TVec;
@@ -280,7 +325,8 @@ allToOneRelay(vector<int>& relayLoad, int king, int sendSize) {
   }
   // -- send to king
   int kIdx = getChannelIdx(king);
-  _partyChannels[kIdx]->getChannel()->write(sendBuf.data(), sendSize);
+  _partyChannels[kIdx]->getChannel()->write(sendBuf.data(),
+                                            sendSize * relayLoad.size());
 }
 
 
@@ -486,3 +532,125 @@ rwWorker(vector<vector<byte>> &sendBufs, vector<vector<byte>> &recBufs,
   }
 }
 
+void Communication::
+allToOneStore(vector<byte> &myShare, vector<vector<byte>> &myRelay,
+              vector<vector<byte>> &recBufs, int king) {
+  int sendSize = myShare.size();
+  if (_myId == king) {
+    recBufs.clear();
+    recBufs.resize(_N, vector<byte>(sendSize, 0));
+  }
+
+  myRelay.assign(_N, vector<byte>());
+  if (_disp_pt->hasDisp(king)) {
+    vector<int> relay;
+    vector<bool> relayerMask;
+    vector<vector<int>> relayerLoad;
+    _disp_pt->rlyeeVecs(king, relay, relayerMask, relayerLoad);
+    if (_myId == king) {        // receive from relayers
+      recFromRelay(recBufs, relayerMask, relayerLoad, sendSize);
+    } else if (relay[_myId] > -1) { // send to relayers
+      int relayerIdx = getChannelIdx(relay[_myId]);
+      _partyChannels[relayerIdx]->getChannel()->write(myShare.data(), sendSize);
+    } else if (relayerMask[_myId]) { // receive from relayees, send to king
+      allToOneRelayStore(relayerLoad[_myId], myRelay, king, sendSize);
+    } // else: send directly to king later
+  }
+
+  if (_myId == king) {          // direct receive
+    recBufs[_myId] = myShare;
+    vector<bool> myMask;
+    _disp_pt->nonDispMask(_myId, myMask);
+    vector<thread> threads(_nCommThreads);
+    for (int t = 0; t < _nCommThreads; t++) {
+      threads[t] =
+        thread(&Communication::rWorker, this, ref(recBufs), ref(myMask), t);
+    }
+    rWorker(recBufs, myMask, _nCommThreads);
+    for (int t = 0; t < _nCommThreads; t++) {
+      threads[t].join();
+    }
+  } else if (!_disp_pt->isDisp(_myId, king)) { // direct send
+    int kIdx = getChannelIdx(king);
+    _partyChannels[kIdx]->getChannel()->write(myShare.data(), sendSize);
+  }
+}
+
+void Communication::
+allToOneRelayStore(vector<int>& relayLoad, vector<vector<byte>>& relayBufs,
+                   int king, int sendSize) {
+  // -- gather relayees
+  vector<bool> relayee(_N, false);
+  for (int rlyeeIdx : relayLoad) {
+    relayee[rlyeeIdx] = true;
+    relayBufs[rlyeeIdx].resize(sendSize);
+  }
+  // -- receive from relayees
+  vector<thread> threads(_nCommThreads);
+  for (int t = 0; t < _nCommThreads; t++) {
+    threads[t] =
+      thread(&Communication::rWorker, this, ref(relayBufs), ref(relayee), t);
+  }
+  rWorker(relayBufs, relayee, _nCommThreads);
+  for (int t = 0; t < _nCommThreads; t++) {
+    threads[t].join();
+  }
+  // -- compbine relayee messages
+  vector<byte> sendBuf(relayLoad.size() * sendSize);
+  auto segStart = sendBuf.begin();
+  for (int rlyeeIdx : relayLoad) {
+    copy(relayBufs[rlyeeIdx].begin(), relayBufs[rlyeeIdx].end(), segStart);
+    segStart += sendSize;
+  }
+  // -- send to king
+  int kIdx = getChannelIdx(king);
+  _partyChannels[kIdx]->getChannel()->write(sendBuf.data(),
+                                            sendSize * relayLoad.size());
+}
+
+void Communication::
+oneToOneStore(int fromId, int toId, vector<byte> &sendBuf,
+              vector<byte> &relayBuf, vector<byte> &recBuf) {
+  relayBuf.clear();
+  int recSize = recBuf.size();
+  if (_disp_pt->isDisp(fromId, toId)) {
+    // use relay
+    int relayer = _disp_pt->relayer(toId, fromId);
+    if (_myId == fromId) {
+      int idx = getChannelIdx(relayer);
+      _partyChannels[idx]->getChannel()->write(sendBuf.data(), recSize);
+    }
+    if (_myId == relayer) {
+      relayBuf.resize(recSize);
+      int fromIdx = getChannelIdx(fromId);
+      _partyChannels[fromIdx]->getChannel()->read(relayBuf.data(), recSize);
+      int toIdx = getChannelIdx(toId);
+      _partyChannels[toIdx]->getChannel()->write(relayBuf.data(), recSize);
+    }
+    if (_myId == toId) {
+      int idx = getChannelIdx(relayer);
+      _partyChannels[idx]->getChannel()->read(recBuf.data(), recSize);
+    }
+  } else {
+    if (_myId == fromId) {
+      int idx = getChannelIdx(toId);
+      _partyChannels[idx]->getChannel()->write(sendBuf.data(), recSize);
+    }
+    if (_myId == toId) {
+      int idx = getChannelIdx(fromId);
+      _partyChannels[idx]->getChannel()->read(recBuf.data(), recSize);
+    }
+  }
+}
+
+void Communication::
+write(vector<byte> &sendBuf, int id) {
+  int idx = getChannelIdx(id);
+  _partyChannels[idx]->getChannel()->write(sendBuf.data(), sendBuf.size());
+}
+
+void Communication::
+read(vector<byte> &recBuf, int id) {
+  int idx = getChannelIdx(id);
+  _partyChannels[idx]->getChannel()->read(recBuf.data(), recBuf.size());
+}

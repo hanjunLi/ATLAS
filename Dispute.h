@@ -3,7 +3,7 @@
 #define DISPUTE_H_
 
 
-#define NDEBUG
+// #define NDEBUG
 
 #include <assert.h>
 #include <vector>
@@ -25,6 +25,7 @@ public:
   Dispute();
   ~Dispute();
 
+  // improve: remember per-seg structures for repeated use
   void reset(int N);
   void addDispPairs(int p1, int p2);
   void addCorrParty(int p);
@@ -36,7 +37,8 @@ public:
   void corrSet(vector<int>& corrs);
   int dispAndNonDispSet(int p, vector<int>& DispSet, vector<int>& NonDispSet);
   int twistSet(int p, int target, vector<int>& TwistSet);
-  
+  int relayer(int pTo, int pFrom);
+  bool isRelayer(int p, int myId);
   bool rlyeeVecs(int p, vector<int>& relay, vector<bool>& relayerMask,
                  vector<vector<int>>& relayerLoad);
   bool rlyerVecs(int p, vector<bool>& relayeeMask,
@@ -45,7 +47,10 @@ public:
   void tMaskP(int p, vector<bool>& TMask);
   void tMaskPRev(int p, vector<bool>& TMaskRev);
   
-  void corrMask(vector<bool>& cMask) { cMask = _corr;}
+  void nonCorrMask(vector<bool>& cMask) {
+    cMask.resize(_N);
+    for (int i = 0; i < _N; i++) { cMask[i] = !_corr[i]; }
+  }
   void nonDispMask(int p, vector<bool> &dMask) {
     dMask.resize(_N);
     for (int i=0; i<_N; i++) { dMask[i] = !_disp[p][i]; }

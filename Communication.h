@@ -35,23 +35,28 @@ public:
 
   void reset(int N, int myId, int numThreads,
              string partiesFile, Dispute* disp_pt);
-  // w/o relay round functions
+  // improve: consistent way for resizing recBuf
+  void allBroadcast(vector<byte>& sendBuf, vector<vector<byte>>& recBufs);
+  void singleBroadcast(int king, vector<byte>& sendBuf, vector<byte>& recBuf);
+  // -- w/o relay round functions
   void kingToT(int king, vector<byte> &myShare, vector<vector<byte>> &sendBufs);
   void TToKing(int king, vector<byte> &myShare, vector<vector<byte>> &recBufs);
   void allToT(vector<vector<byte>> &sendBufs, vector<vector<byte>> &recBufs);
-  // w/ relay round functions
+  // -- w/ relay round functions
   void allToAll(vector<vector<byte>> &sendBufs, vector<vector<byte>> &recBufs, bool relay = true);
+  // NOTE: receive size calculated by the size of sendBuf
   void allToOne(vector<byte> &myShare, vector<vector<byte>> &recBufs, int king, bool relay = true);
   void oneToAll(vector<byte> &myShare, vector<vector<byte>> &sendBufs, int king, bool relay = true);
-  // relayee helpers
+
+  // -- relayee helpers
   void recFromRelay(vector<vector<byte>>& recBufs, vector<bool>& relayerMask,
                     vector<vector<int>>& relayerLoad, int sendSize);
   void sendToRelay(vector<vector<byte>>& sendBufs, vector<bool>& relayerMask,
                    vector<vector<int>>& relayerLoad, int recSize);
-  // relayer helpers
+  // -- relayer helpers
   void allToOneRelay(vector<int>& relayLoad, int king, int sendSize);
   void oneToAllRelay(vector<int>& relayLoad, int king, int recSize);
-  // all-to-all relay helper (for both relayer and relayee)
+  // -- all-to-all relay helper (for both relayer and relayee)
   void allToAllRelay(vector<vector<byte>>& sendBufs, vector<vector<byte>>& recBufs);
   void allToRelayer(vector<vector<byte>>& rSendBufs, vector<vector<byte>>& relayBufs,
                     vector<bool>& rlyerMask, vector<bool>& rlyeeMask,
@@ -59,11 +64,22 @@ public:
   void relayerToAll(vector<vector<byte>>& rSendBufs, vector<vector<byte>>& rRecBufs,
                     vector<bool>& rlyerMask, vector<bool>& rlyeeMask,
                     bool isRelayer, bool isRelayee);
-  // thread functions
+  // -- thread functions
   void rWorker(vector<vector<byte>> &recBufs, vector<bool>& mask, int id);
   void wWorker(vector<vector<byte>> &sendBufs, vector<bool>& mask, int id);
   void rwWorker(vector<vector<byte>> &sendBufs, vector<vector<byte>> &recBufs,
                 vector<bool>& readMask, vector<bool>& writeMask, int id);
+
+  // -- special version for dispute
+  // improve: avoid writing these. parametrize above ones
+  void allToOneStore(vector<byte> &myShare, vector<vector<byte>> &myRelay,
+                     vector<vector<byte>> &recBufs, int king);
+  void oneToOneStore(int fromId, int toId, vector<byte>& sendBuf, vector<byte>& relayBuf, vector<byte>& recBuf);
+  
+  
+  void allToOneRelayStore(vector<int>& relayLoad, vector<vector<byte>>& relayBufs, int king, int sendSize);
+  void write(vector<byte>& sendBuf, int id);
+  void read(vector<byte>& recBuf, int id);
 };
 
 

@@ -10,6 +10,7 @@ INCLUDE_DIRECTORIES($ENV{HOME}/libscapi/install/include $ENV{HOME}
 set(SOURCE_FILES main.cpp
         ProtocolParty.cpp ProtocolParty.h ProtocolTimer.cpp ProtocolTimer.h
         Interpolate.h Interpolate.cpp Dispute.h Dispute.cpp
+        Tape.h Share.h HIM.h
         Communication.h Communication.cpp)
 
 link_directories(/usr/ssl/lib/ $ENV{HOME}/libscapi/install/lib )
