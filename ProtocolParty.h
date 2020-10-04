@@ -52,6 +52,8 @@ private:
   Communication _comm;
   Dispute _disp;
   vector<PrgFromOpenSSLAES> _prgs;
+  vector<int> _prgOffsets;
+  vector<vector<FieldType>> _prgElems;
   HIM<FieldType> _mat_to_T, _mat_T_to_n;;
   FieldType _zero;
   int _fieldByteSize;
@@ -120,9 +122,13 @@ private:
 
   __inline__
   FieldType prgForP(int pid) {
-    vector<byte> prgBytes(_fieldByteSize);
-    _prgs[pid].getPRGBytes(prgBytes, 0, _fieldByteSize);
-    return _field->bytesToElement(prgBytes.data());
+    if (_prgOffsets[pid] >= _prgElems[pid].size()) {
+      cout << "not enough prepared prg elements: "
+           << _prgOffsets[pid] << " / " << _prgElems[pid].size()
+           << endl;
+      abort();
+    }
+    return _prgElems[pid][_prgOffsets[pid]++];
   }
 
   __inline__
@@ -284,6 +290,27 @@ private:
     }
   }
 
+  __inline__
+  void preparePrgElements(int nElements) {
+    int cachedSize = 12800 * 16;
+    int nBytes = nElements * _fieldByteSize;
+    int nChunks = nBytes / cachedSize;
+    int nTailBytes = nBytes - nChunks * cachedSize;
+    vector<byte> prgBytes(nBytes, 0);
+
+    for (int pid=0; pid<_N; pid++) {
+      for (int i=0; i<nChunks; i++) {
+        _prgs[pid].getPRGBytes(prgBytes, i * cachedSize, cachedSize);
+      }
+      _prgs[pid].getPRGBytes(prgBytes, nChunks * cachedSize, nTailBytes);
+
+      for (int i=0; i<nElements; i++) {
+        FieldType r =
+          _field->bytesToElement(prgBytes.data() + i * _fieldByteSize);
+        _prgElems[pid].push_back(r);
+      }
+    }
+  }
 
 public:
   bool hasOffline() override { return true; }
@@ -433,6 +460,10 @@ makeRandDoubleShares(int nRands, vector<FieldType> &randSharePairs, vector<int>&
 
 template <class FieldType>
 void ProtocolParty<FieldType>::setUpSeeds() {
+  _prgOffsets.clear();
+  _prgOffsets.resize(_N, 0);
+  _prgElems.clear();
+  _prgElems.resize(_N);
   _prgs.resize(_N);
   int seedSize = (PRG_KEY_SIZE + _fieldByteSize -1) / _fieldByteSize;
   vector<vector<FieldType>> seeds(_N, vector<FieldType>(seedSize, _zero));
@@ -1104,22 +1135,21 @@ template <class FieldType> bool ProtocolParty<FieldType>::preparationPhase() {
   // 3. Random Coins
   //    [1]
   //    in total: nCompressions + 2
-  int nCompressions = (int)(log(this->numOfMultGates) / log(_K) + 0.5);
+  int nCompressions = (int)(log(numOfMultGates) / log(_K) + 0.5);
   int numSingleShares = 2 * _K + nCompressions + 2;
-  _singleSharesOffset = 0;
-  makeRandShares(numSingleShares, _singleSharesArray);
-  // cout << "generated single Shares: " << numSingleShares << endl;
-  
   // ---- # of random double shares:
   // 1. Compute Mult gates in the circuit
   //    -- in total: numOfMultGates
   // 2. Compress Verification
   //    -- 2 * _K * (nCompressions + 1)
-  int numDoubleShares =
-    this->numOfMultGates + (nCompressions+1)*_K*2;
+  int numDoubleShares = numOfMultGates + (nCompressions+1)*_K*2;
+  int numPrgCalls = ((numSingleShares + numDoubleShares) / _N +1) +
+    ((numDoubleShares) / _N * _T / (_T+1) +1);
+  preparePrgElements(numPrgCalls*2);
+  _singleSharesOffset = 0;
+  makeRandShares(numSingleShares, _singleSharesArray);
   _doubleSharesOffset = 0;
   makeRandDoubleShares(numDoubleShares, _doubleSharesArray, _doubleKingIds);
-  // cout << "generated doubles: " << numDoubleShares << endl;
   return true;
 }
 
