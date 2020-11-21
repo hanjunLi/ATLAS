@@ -2,7 +2,6 @@
 #define PROTOCOLPARTY_H_
 
 #include <stdlib.h>
-#include "HashEncrypt.h"
 #include "ProtocolTimer.h"
 #include <bitset>
 #include <chrono>
