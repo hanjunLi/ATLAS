@@ -1,7 +1,9 @@
+#input: n_parties, scale of train of each party
 import numpy as np
 # import matplotlib.pyplot as plt
 from sklearn import linear_model
 from scipy import linalg
+import sys
 np.random.seed(41)
 n_train = 463715
 n_test = 51630
@@ -12,10 +14,10 @@ data_train = data[:n_train]
 # data_train = data[:463715]
 data_test = data[n_train:n_train + n_test]
 # data_test = data[463715:]
-n_train = 5000 * 80
+nParties = int(sys.argv[1])
+n_train = 1000 * nParties * int(sys.argv[2])
 np.random.shuffle(data_train)
 data_train = data_train[:n_train]
-nParties = 5
 nFeatures = 90  # TODO: should be 90
 nIter = 10                      # TODO: experiment and change this
 param_rho = 10                  # TODO: experiment and change this
@@ -150,12 +152,14 @@ for _ in range(nFeatures):
     _z.append(curv)
     print(curv)
 #calculated accuracy
+res_file = open("result_song.txt","a")
+res_file.write(str(n_train / nParties)+":")
 prediction = (data_test[:, 1:1+nFeatures] @ _z).round()
 truth = (data_test[:, 0]).round()
 l2Error = compute_error(prediction, truth)
 mae = compute_mae(prediction, truth)
 print("My Helen prediction error: ", l2Error, mae)
-
+res_file.write(str(l2Error)+","+str(mae)+"/")
 # -- baseline accuracy
 clf = linear_model.Lasso(alpha=param_lamb)
 # clf = linear_model.LinearRegression()
@@ -164,7 +168,8 @@ sk_prediction = clf.predict(data_test[:, 1:1+nFeatures]).round()
 skl2Error = compute_error(sk_prediction, truth)
 mae = compute_mae(sk_prediction,truth)
 print("sklearn prediction error: ", skl2Error,mae)
-
+res_file.write(str(skl2Error)+","+str(mae)+"\n")
+res_file.close()
 # -- prepare input data for MPC
 for curSize in MPC_sizes:
     
