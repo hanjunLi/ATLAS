@@ -210,6 +210,8 @@ CompareGate<FieldType>::CompareGate(ProtocolParty<FieldType> *ptr,int siz,int bs
 	if(flag_print)
 		cout<<"testing FieldType():"<<FieldType(1)<<endl;
 	m_partyID = id;
+	if(flag_print)
+		cout<<"id:"<<m_partyID<<endl;
 	helper = ptr;
 	_bitShareOffset=0;
 	eleSize = siz;
@@ -1705,7 +1707,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	auto _t02 = high_resolution_clock::now();
 	cout<<"runLasso:preparation time:"<<duration_cast<microseconds>(_t02-_t01).count()<<endl;
 	//the following are for testing
-	vector<FieldType> q1,q2,q3;
+/*	vector<FieldType> q1,q2,q3;
 	q1.push_back(shareOfA[0][0][0]);
 	q2.push_back(shareOfB[0][0]);
 	compRandom(q1,q2,q3);
@@ -1717,7 +1719,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 	helper->openShare(1,q2,q3);
 	_t00 = high_resolution_clock::now();
 	cout<<"compRandom Total Time:"<<duration_cast<microseconds>(_t00-_t01).count()<<endl;
-	return;
+//	return;*/
 	for(int _t=0; _t<iter; _t++)
 	{
 		auto _t01 = time(NULL);
@@ -1876,6 +1878,7 @@ void CompareGate<FieldType>::runLasso(int iter,FieldType lambda, FieldType rho, 
 
 	verificationPhase();    // fix: verify before open mult results
 	helper->openShare(dim,shareOfZ,res);
+	if(flag_print) cout<<"res size: "<<res.size()<<endl;
 	//auto _t04 = high_resolution_clock()::now();
 	//cout<<"runOnline total time:"<<duration_cast<microseconds>(_t04-_t01).count()<<endl;
 	// for(int i=0; i<dim; i++)
@@ -1980,7 +1983,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	//if(flag_print)
 	cout<<"Entering helper->preparation"<<endl;
 	//warning: this line is just for testing.
-	cnt = 400;
+	//cnt = 100000;
 	// TODO: tighten cnt
 	// cnt *= 2;
 	// if (helper->preparationPhase(cnt, cnt) == false) {
@@ -2001,8 +2004,8 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	int cnt_bit = 18 * n_iter * dim * dim / 10;
 	cnt_bit = cnt_bit / 40;
 	//uncomment this for 16*16
-	//cnt_bit*= 6;
-	cnt_bit = 1;
+	cnt_bit*= 6;
+	//cnt_bit = 1;
 	generateBitShares(cnt_bit);
 	_t2 = time(NULL);
 	cout<<"Generating Bit time:"<<_t2-_t1<<endl;
@@ -2100,10 +2103,14 @@ void CompareGate<FieldType>::verificationPhase()
 void CompareGate<FieldType>::outputPhase(vector<FieldType> &res,string f)
 {
 	if(m_partyID!=0) return;
+	//if(flag_print) printf("Party %d outputing, size %d\n",m_partyID,res.size());
 	ofstream ouf;
 	ouf.open("output" + f + ".txt");
 	for(int i=0; i<res.size(); i++)
+	{
 		ouf<<res[i]; //no need for endl
+		if(flag_print) cout<<res[i];
+	}
 	ouf.close();
 }
 #endif /* COMPARISON_H_ */
