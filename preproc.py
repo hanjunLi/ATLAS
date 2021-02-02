@@ -7,7 +7,7 @@ n_train = 463715
 n_test = 51630
 # -- global trainning data and parameters
 # data = np.genfromtxt("small_data.txt",delimiter=',')
-data = np.genfromtxt("YearPredictionMSD.txt", delimiter=',')
+data = np.genfromtxt("../data/YearPredictionMSD.txt", delimiter=',')
 data_train = data[:n_train]
 # data_train = data[:463715]
 data_test = data[n_train:n_train + n_test]

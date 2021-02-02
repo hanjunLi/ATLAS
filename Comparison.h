@@ -1899,7 +1899,7 @@ template <class FieldType> void CompareGate<FieldType>::readLassoInputs()
 	if(flag_print)
 		cout<<"Read "<<n<<endl;
 	//WARNING: only for test purpose
-	n = 1;
+	//n = 1;
 	//read Ai
 	_Ai.resize(n);
 	for(int i=0; i<n; i++)
@@ -1976,10 +1976,12 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	cout<<"reading real time:"<<_t2-_t1<<endl;
 	_t1 = time(NULL);
 	int dim = _Ai.size();
-	int cnt = 40 * dim * dim  * n_iter * eleSize / 10;
-	//uncomment this for 90 * 90
-	cnt = cnt * 2 / 80;
-	//cnt *= 6;
+	cout<<"dim: "<<dim<<endl;
+	int N = helper->getN();
+	int cnt = dim * dim  * n_iter *eleSize * N;
+	//cnt /= 9; //for 16 * 16
+	if(dim==16) cnt /= 7;
+	if(dim==90) cnt /= 40; //for 90*90
 	//if(flag_print)
 	cout<<"Entering helper->preparation"<<endl;
 	//warning: this line is just for testing.
@@ -1987,7 +1989,7 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	// TODO: tighten cnt
 	// cnt *= 2;
 	// if (helper->preparationPhase(cnt, cnt) == false) {
-	if (helper->preparationPhase(cnt, cnt*3) == false) {
+	if (helper->preparationPhase(cnt, cnt*5/2) == false) {
 		if (flag_print) {
 			cout << "preparationPhase failed" << '\n';
 		}
@@ -2001,10 +2003,10 @@ template <class FieldType> void CompareGate<FieldType>::runOffline() {
 	cout<<"Preparation real time:"<<_t2-_t1<<endl;
 	_t1=time(NULL);
 	cout<<"generating bit"<<endl;
-	int cnt_bit = 18 * n_iter * dim * dim / 10;
-	cnt_bit = cnt_bit / 40;
-	//uncomment this for 16*16
-	cnt_bit*= 6;
+	int cnt_bit = 1 * n_iter * dim * N;
+	//cnt_bit = cnt_bit / 40;
+	if(dim==16) cnt_bit /= 1; //for 16*16
+	if(dim==90) cnt_bit /= 1; //for 90*90;
 	//cnt_bit = 1;
 	generateBitShares(cnt_bit);
 	_t2 = time(NULL);

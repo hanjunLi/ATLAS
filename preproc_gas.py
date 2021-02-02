@@ -7,7 +7,7 @@ n_train = 4178504
 n_test = 4200000
 # -- global trainning data and parameters
 # data = np.genfromtxt("small_data.txt",delimiter=',')
-data = np.genfromtxt("ethylene_CO.txt")
+data = np.genfromtxt("../data/ethylene_CO.txt")
 _cnt = 0
 data_train = []
 data_test = []
